@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/Basic/Diagnostic.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
-
-#include "llvm/Support/Path.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -27,22 +26,32 @@ const std::set<std::string> kIgnoredFunctions{
 namespace libtool {
 llvm::cl::OptionCategory category{"libtool options"};
 
+enum class diagnostic : int {
+  unexported_public_interface,
+  exported_private_member,
+};
+
 class visitor : public clang::RecursiveASTVisitor<visitor> {
   clang::ASTContext &context_;
   clang::SourceManager &source_manager_;
 
   llvm::DenseSet<const clang::NamedDecl *> decls_;
 
-  void diagnose(const clang::NamedDecl *ND, clang::FullSourceLoc location) {
-    ND->printQualifiedName(llvm::outs());
+  template <diagnostic id>
+  clang::DiagnosticBuilder diagnose(clang::SourceLocation location);
 
-    llvm::StringRef filename = source_manager_.getFilename(location);
-    // NOTE(compnerd) hardcode 261 to avoid Windows.h dependency
-    llvm::SmallVector<char, 261> buffer;
-    llvm::sys::path::native(filename, buffer);
+  template <>
+  clang::DiagnosticBuilder diagnose<diagnostic::unexported_public_interface>(clang::SourceLocation location) {
+    clang::DiagnosticsEngine &diagnostics = context_.getDiagnostics();
+    static unsigned id = diagnostics.getCustomDiagID(clang::DiagnosticsEngine::Remark, "unexported public interface %0");
+    return diagnostics.Report(location, id);
+  }
 
-    llvm::outs() << " at " << buffer << ":"
-                 << location.getExpansionLineNumber() << '\n';
+  template <>
+  clang::DiagnosticBuilder diagnose<diagnostic::exported_private_member>(clang::SourceLocation location) {
+    clang::DiagnosticsEngine &diagnostics = context_.getDiagnostics();
+    static unsigned id = diagnostics.getCustomDiagID(clang::DiagnosticsEngine::Remark, "exported private interface %0");
+    return diagnostics.Report(location, id);
   }
 
   template <typename Decl_>
@@ -78,7 +87,7 @@ public:
     if (kIgnoredFunctions.find(FD->getNameAsString()) != kIgnoredFunctions.end())
       return true;
 
-    diagnose(FD, location);
+    diagnose<diagnostic::unexported_public_interface>(location) << FD;
     return true;
   }
 
@@ -105,7 +114,7 @@ public:
     if (MD->getAccess() == clang::AccessSpecifier::AS_private) {
       // Private methods should not be exported.
       if (MD->hasAttr<clang::DLLExportAttr>())
-        diagnose(MD, location);   // TODO(compnerd) improve the diagnostic
+        diagnose<diagnostic::exported_private_member>(location) << MD;
       return true;
     }
 
@@ -116,7 +125,7 @@ public:
 
     const clang::CXXRecordDecl *RD = MD->getParent()->getCanonicalDecl();
 
-    diagnose(MD, location);
+    diagnose<diagnostic::unexported_public_interface>(location) << MD;
     return true;
   }
 };
