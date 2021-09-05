@@ -21,6 +21,10 @@ const std::set<std::string> kIgnoredFunctions{
   "_BitScanReverse64",
   "__builtin_strlen",
 };
+
+llvm::cl::opt<std::string>
+export_macro("export-macro", llvm::cl::desc("export macro"),
+             llvm::cl::value_desc("define"), llvm::cl::Required);
 }
 
 namespace libtool {
@@ -87,7 +91,8 @@ public:
     if (kIgnoredFunctions.find(FD->getNameAsString()) != kIgnoredFunctions.end())
       return true;
 
-    diagnose<diagnostic::unexported_public_interface>(location) << FD;
+    diagnose<diagnostic::unexported_public_interface>(location) << FD
+        << clang::FixItHint::CreateInsertion(FD->getBeginLoc(), export_macro + " ");
     return true;
   }
 
@@ -125,7 +130,8 @@ public:
 
     const clang::CXXRecordDecl *RD = MD->getParent()->getCanonicalDecl();
 
-    diagnose<diagnostic::unexported_public_interface>(location) << MD;
+    diagnose<diagnostic::unexported_public_interface>(location) << MD
+        << clang::FixItHint::CreateInsertion(MD->getBeginLoc(), export_macro + " ");
     return true;
   }
 };
