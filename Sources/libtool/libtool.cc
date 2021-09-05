@@ -39,8 +39,6 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   clang::ASTContext &context_;
   clang::SourceManager &source_manager_;
 
-  llvm::DenseSet<const clang::NamedDecl *> decls_;
-
   template <diagnostic id>
   clang::DiagnosticBuilder diagnose(clang::SourceLocation location);
 
@@ -146,7 +144,6 @@ public:
 
   void HandleTranslationUnit(clang::ASTContext &context) override {
     visitor_.TraverseDecl(context.getTranslationUnitDecl());
-    // visitor_.diagnose();
   }
 };
 
