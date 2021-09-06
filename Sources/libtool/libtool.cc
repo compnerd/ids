@@ -87,6 +87,10 @@ public:
     if (source_manager_.isInSystemHeader(location))
       return true;
 
+    // We are only interested in non-dependent types.
+    if (FD->isDependentContext())
+      return true;
+
     // If the function has a body, it can be materialized by the user.
     if (FD->hasBody())
       return true;
