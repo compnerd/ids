@@ -50,30 +50,30 @@ bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
 }
 
 namespace libtool {
-enum class diagnostic : int {
-  unexported_public_interface,
-  exported_private_member,
-};
-
 class visitor : public clang::RecursiveASTVisitor<visitor> {
   clang::ASTContext &context_;
   clang::SourceManager &source_manager_;
 
-  template <diagnostic id>
-  clang::DiagnosticBuilder diagnose(clang::SourceLocation location);
+  clang::DiagnosticBuilder
+  unexported_public_interface(clang::SourceLocation location) {
+    clang::DiagnosticsEngine &diagnostics_engine = context_.getDiagnostics();
 
-  template <>
-  clang::DiagnosticBuilder diagnose<diagnostic::unexported_public_interface>(clang::SourceLocation location) {
-    clang::DiagnosticsEngine &diagnostics = context_.getDiagnostics();
-    static unsigned id = diagnostics.getCustomDiagID(clang::DiagnosticsEngine::Remark, "unexported public interface %0");
-    return diagnostics.Report(location, id);
+    static unsigned kID =
+        diagnostics_engine.getCustomDiagID(clang::DiagnosticsEngine::Remark,
+                                           "unexported public interface %0");
+
+    return diagnostics_engine.Report(location, kID);
   }
 
-  template <>
-  clang::DiagnosticBuilder diagnose<diagnostic::exported_private_member>(clang::SourceLocation location) {
-    clang::DiagnosticsEngine &diagnostics = context_.getDiagnostics();
-    static unsigned id = diagnostics.getCustomDiagID(clang::DiagnosticsEngine::Remark, "exported private interface %0");
-    return diagnostics.Report(location, id);
+  clang::DiagnosticBuilder
+  exported_private_interface(clang::SourceLocation location) {
+    clang::DiagnosticsEngine &diagnostics_engine = context_.getDiagnostics();
+
+    static unsigned kID =
+        diagnostics_engine.getCustomDiagID(clang::DiagnosticsEngine::Remark,
+                                           "unexported private interface %0");
+
+    return diagnostics_engine.Report(location, kID);
   }
 
   template <typename Decl_>
@@ -114,7 +114,7 @@ public:
         // TODO(compnerd) this should also handle `__visibility__`
         if (MD->hasAttr<clang::DLLExportAttr>())
           // TODO(compnerd) this should emit a fix-it to remove the attribute
-          diagnose<diagnostic::exported_private_member>(location) << MD;
+          exported_private_interface(location) << MD;
         return true;
       }
     }
@@ -134,7 +134,8 @@ public:
         FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
             ? FD->getBeginLoc()
             : FD->getInnerLocStart();
-    diagnose<diagnostic::unexported_public_interface>(location) << FD
+    unexported_public_interface(location)
+        << FD
         << clang::FixItHint::CreateInsertion(insertion_point,
                                              export_macro + " ");
     return true;
