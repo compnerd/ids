@@ -4,6 +4,7 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
 
@@ -31,6 +32,16 @@ export_macro("export-macro",
              llvm::cl::desc("The macro to decorate interfaces with"),
              llvm::cl::value_desc("define"), llvm::cl::Required,
              llvm::cl::cat(libtool::category));
+
+llvm::cl::opt<bool>
+apply_fixits("apply-fixits", llvm::cl::init(false),
+             llvm::cl::desc("Apply suggested changes to decorate interfaces"),
+             llvm::cl::cat(libtool::category));
+
+llvm::cl::opt<bool>
+inplace("inplace", llvm::cl::init(false),
+        llvm::cl::desc("Apply suggested changes in-place"),
+        llvm::cl::cat(libtool::category));
 }
 
 namespace libtool {
@@ -139,15 +150,41 @@ public:
 };
 
 class consumer : public clang::ASTConsumer {
-  clang::ASTContext &context_;
+  struct fixit_options : clang::FixItOptions {
+    fixit_options() {
+      InPlace = inplace;
+      Silent = apply_fixits;
+    }
+
+    std::string RewriteFilename(const std::string &filename, int &fd) override {
+      llvm_unreachable("unexpected call to RewriteFilename");
+    }
+  };
+
   libtool::visitor visitor_;
+
+  fixit_options options_;
+  std::unique_ptr<clang::FixItRewriter> rewriter_;
 
 public:
   explicit consumer(clang::ASTContext &context)
-      : context_(context), visitor_(context) {}
+      : visitor_(context) {}
 
   void HandleTranslationUnit(clang::ASTContext &context) override {
+    if (apply_fixits) {
+      clang::DiagnosticsEngine &diagnostics_engine = context.getDiagnostics();
+      rewriter_ =
+          std::make_unique<clang::FixItRewriter>(diagnostics_engine,
+                                                 context.getSourceManager(),
+                                                 context.getLangOpts(),
+                                                 &options_);
+      diagnostics_engine.setClient(rewriter_.get(), /*ShouldOwnClient=*/false);
+    }
+
     visitor_.TraverseDecl(context.getTranslationUnitDecl());
+
+    if (apply_fixits)
+      rewriter_->WriteFixedFiles();
   }
 };
 
