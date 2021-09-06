@@ -95,6 +95,10 @@ public:
     if (llvm::isa<clang::CXXMethodDecl>(FD))
       return true;
 
+    // Ignore friend declarations.
+    if (llvm::isa<clang::FriendDecl>(FD))
+      return true;
+
     // If the function has a dll-interface, it is properly annotated.
     if (FD->hasAttr<clang::DLLExportAttr>() ||
         FD->hasAttr<clang::DLLImportAttr>())
@@ -122,6 +126,10 @@ public:
 
     // If the method has a body, it can be materialized by the user.
     if (MD->hasBody())
+      return true;
+
+    // Ignore friend declarations.
+    if (llvm::isa<clang::FriendDecl>(MD))
       return true;
 
     // Ignore deleted and defaulted members.
