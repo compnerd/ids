@@ -116,8 +116,13 @@ public:
     if (kIgnoredFunctions.find(FD->getNameAsString()) != kIgnoredFunctions.end())
       return true;
 
+    clang::SourceLocation insertion_point =
+        FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
+            ? FD->getBeginLoc()
+            : FD->getInnerLocStart();
     diagnose<diagnostic::unexported_public_interface>(location) << FD
-        << clang::FixItHint::CreateInsertion(FD->getBeginLoc(), export_macro + " ");
+        << clang::FixItHint::CreateInsertion(insertion_point,
+                                             export_macro + " ");
     return true;
   }
 
@@ -159,8 +164,13 @@ public:
 
     const clang::CXXRecordDecl *RD = MD->getParent()->getCanonicalDecl();
 
+    clang::SourceLocation insertion_point =
+        MD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
+            ? MD->getBeginLoc()
+            : MD->getInnerLocStart();
     diagnose<diagnostic::unexported_public_interface>(location) << MD
-        << clang::FixItHint::CreateInsertion(MD->getBeginLoc(), export_macro + " ");
+        << clang::FixItHint::CreateInsertion(insertion_point,
+                                             export_macro + " ");
     return true;
   }
 };
