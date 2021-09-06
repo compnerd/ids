@@ -12,6 +12,10 @@
 #include <set>
 #include <string>
 
+namespace libtool {
+llvm::cl::OptionCategory category{"libtool options"};
+}
+
 namespace {
 // TODO(compnerd) make this configurable via a configuration file or command line
 const std::set<std::string> kIgnoredFunctions{
@@ -23,13 +27,13 @@ const std::set<std::string> kIgnoredFunctions{
 };
 
 llvm::cl::opt<std::string>
-export_macro("export-macro", llvm::cl::desc("export macro"),
-             llvm::cl::value_desc("define"), llvm::cl::Required);
+export_macro("export-macro",
+             llvm::cl::desc("The macro to decorate interfaces with"),
+             llvm::cl::value_desc("define"), llvm::cl::Required,
+             llvm::cl::cat(libtool::category));
 }
 
 namespace libtool {
-llvm::cl::OptionCategory category{"libtool options"};
-
 enum class diagnostic : int {
   unexported_public_interface,
   exported_private_member,
