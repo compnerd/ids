@@ -100,10 +100,6 @@ public:
     if (FD->hasBody())
       return true;
 
-    // Let `VisitCXXMethodDecl` handle `CXXMethodDecl`s
-    if (llvm::isa<clang::CXXMethodDecl>(FD))
-      return true;
-
     // Ignore friend declarations.
     if (llvm::isa<clang::FriendDecl>(FD))
       return true;
@@ -112,7 +108,19 @@ public:
     if (FD->isDeleted() || FD->isDefaulted())
       return true;
 
+    if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD)) {
+      // Ignore private members (except for a negative check).
+      if (MD->getAccess() == clang::AccessSpecifier::AS_private) {
+        // TODO(compnerd) this should also handle `__visibility__`
+        if (MD->hasAttr<clang::DLLExportAttr>())
+          // TODO(compnerd) this should emit a fix-it to remove the attribute
+          diagnose<diagnostic::exported_private_member>(location) << MD;
+        return true;
+      }
+    }
+
     // If the function has a dll-interface, it is properly annotated.
+    // TODO(compnerd) this should also handle `__visibility__`
     if (FD->hasAttr<clang::DLLExportAttr>() ||
         FD->hasAttr<clang::DLLImportAttr>())
       return true;
@@ -127,54 +135,6 @@ public:
             ? FD->getBeginLoc()
             : FD->getInnerLocStart();
     diagnose<diagnostic::unexported_public_interface>(location) << FD
-        << clang::FixItHint::CreateInsertion(insertion_point,
-                                             export_macro + " ");
-    return true;
-  }
-
-  bool VisitCXXMethodDecl(clang::CXXMethodDecl *MD) {
-    clang::FullSourceLoc location = get_location(MD);
-
-    // Ignore declarations from the system.
-    if (source_manager_.isInSystemHeader(location))
-      return true;
-
-    // We are only interested in non-dependent types.
-    if (MD->isDependentContext())
-      return true;
-
-    // If the method has a body, it can be materialized by the user.
-    if (MD->hasBody())
-      return true;
-
-    // Ignore friend declarations.
-    if (llvm::isa<clang::FriendDecl>(MD))
-      return true;
-
-    // Ignore deleted and defaulted members.
-    if (MD->isDeleted() || MD->isDefaulted())
-      return true;
-
-    // Ignore private members (except for a negative check).
-    if (MD->getAccess() == clang::AccessSpecifier::AS_private) {
-      // Private methods should not be exported.
-      if (MD->hasAttr<clang::DLLExportAttr>())
-        diagnose<diagnostic::exported_private_member>(location) << MD;
-      return true;
-    }
-
-    // Methods which are explicitly exported are properly annotated.
-    if (MD->hasAttr<clang::DLLExportAttr>() ||
-        MD->hasAttr<clang::DLLImportAttr>())
-      return true;
-
-    const clang::CXXRecordDecl *RD = MD->getParent()->getCanonicalDecl();
-
-    clang::SourceLocation insertion_point =
-        MD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
-            ? MD->getBeginLoc()
-            : MD->getInnerLocStart();
-    diagnose<diagnostic::unexported_public_interface>(location) << MD
         << clang::FixItHint::CreateInsertion(insertion_point,
                                              export_macro + " ");
     return true;
