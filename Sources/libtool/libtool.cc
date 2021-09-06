@@ -99,6 +99,10 @@ public:
     if (llvm::isa<clang::FriendDecl>(FD))
       return true;
 
+    // Ignore deleted and defaulted functions (e.g. operators).
+    if (FD->isDeleted() || FD->isDefaulted())
+      return true;
+
     // If the function has a dll-interface, it is properly annotated.
     if (FD->hasAttr<clang::DLLExportAttr>() ||
         FD->hasAttr<clang::DLLImportAttr>())
