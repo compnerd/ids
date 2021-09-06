@@ -188,24 +188,29 @@ public:
   }
 };
 
-class action : public clang::ASTFrontendAction {
-public:
+struct action : clang::ASTFrontendAction {
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &CI, llvm::StringRef) override {
     return std::make_unique<libtool::consumer>(CI.getASTContext());
   }
 };
+
+struct factory : clang::tooling::FrontendActionFactory {
+  std::unique_ptr<clang::FrontendAction> create() override {
+    return std::make_unique<libtool::action>();
+  }
+};
 }
 
 int main(int argc, char *argv[]) {
+  using namespace clang::tooling;
+
   auto options =
-      clang::tooling::CommonOptionsParser::create(argc,
-                                                  const_cast<const char **>(argv),
-                                                  libtool::category,
-                                                  llvm::cl::NumOccurrencesFlag::OneOrMore);
+      CommonOptionsParser::create(argc, const_cast<const char **>(argv),
+                                  libtool::category, llvm::cl::OneOrMore);
   if (options) {
-    clang::tooling::ClangTool tool{options->getCompilations(), options->getSourcePathList()};
-    return tool.run(clang::tooling::newFrontendActionFactory<libtool::action>().get());
+    ClangTool tool{options->getCompilations(), options->getSourcePathList()};
+    return tool.run(new libtool::factory{});
   } else {
     llvm::logAllUnhandledErrors(std::move(options.takeError()), llvm::errs());
     return EXIT_FAILURE;
