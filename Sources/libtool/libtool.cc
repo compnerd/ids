@@ -85,10 +85,6 @@ public:
   explicit visitor(clang::ASTContext &context)
       : context_(context), source_manager_(context.getSourceManager()) {}
 
-  bool VisitVarDecl(clang::VarDecl *VD) {
-    return true;
-  }
-
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {
     clang::FullSourceLoc location = get_location(FD);
 
