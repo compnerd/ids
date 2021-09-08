@@ -117,6 +117,10 @@ public:
           exported_private_interface(location) << MD;
         return true;
       }
+
+      // Pure virtual methods cannot be exported.
+      if (MD->isPure())
+        return true;
     }
 
     // If the function has a dll-interface, it is properly annotated.
