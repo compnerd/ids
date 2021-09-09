@@ -13,8 +13,8 @@
 #include <set>
 #include <string>
 
-namespace libtool {
-llvm::cl::OptionCategory category{"libtool options"};
+namespace idt {
+llvm::cl::OptionCategory category{"iterface definition scanner options"};
 }
 
 namespace {
@@ -31,17 +31,17 @@ llvm::cl::opt<std::string>
 export_macro("export-macro",
              llvm::cl::desc("The macro to decorate interfaces with"),
              llvm::cl::value_desc("define"), llvm::cl::Required,
-             llvm::cl::cat(libtool::category));
+             llvm::cl::cat(idt::category));
 
 llvm::cl::opt<bool>
 apply_fixits("apply-fixits", llvm::cl::init(false),
              llvm::cl::desc("Apply suggested changes to decorate interfaces"),
-             llvm::cl::cat(libtool::category));
+             llvm::cl::cat(idt::category));
 
 llvm::cl::opt<bool>
 inplace("inplace", llvm::cl::init(false),
         llvm::cl::desc("Apply suggested changes in-place"),
-        llvm::cl::cat(libtool::category));
+        llvm::cl::cat(idt::category));
 
 template <typename Key, typename Compare, typename Allocator>
 bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
@@ -49,7 +49,7 @@ bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
 }
 }
 
-namespace libtool {
+namespace idt {
 class visitor : public clang::RecursiveASTVisitor<visitor> {
   clang::ASTContext &context_;
   clang::SourceManager &source_manager_;
@@ -158,7 +158,7 @@ class consumer : public clang::ASTConsumer {
     }
   };
 
-  libtool::visitor visitor_;
+  idt::visitor visitor_;
 
   fixit_options options_;
   std::unique_ptr<clang::FixItRewriter> rewriter_;
@@ -188,13 +188,13 @@ public:
 struct action : clang::ASTFrontendAction {
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &CI, llvm::StringRef) override {
-    return std::make_unique<libtool::consumer>(CI.getASTContext());
+    return std::make_unique<idt::consumer>(CI.getASTContext());
   }
 };
 
 struct factory : clang::tooling::FrontendActionFactory {
   std::unique_ptr<clang::FrontendAction> create() override {
-    return std::make_unique<libtool::action>();
+    return std::make_unique<idt::action>();
   }
 };
 }
@@ -204,10 +204,10 @@ int main(int argc, char *argv[]) {
 
   auto options =
       CommonOptionsParser::create(argc, const_cast<const char **>(argv),
-                                  libtool::category, llvm::cl::OneOrMore);
+                                  idt::category, llvm::cl::OneOrMore);
   if (options) {
     ClangTool tool{options->getCompilations(), options->getSourcePathList()};
-    return tool.run(new libtool::factory{});
+    return tool.run(new idt::factory{});
   } else {
     llvm::logAllUnhandledErrors(std::move(options.takeError()), llvm::errs());
     return EXIT_FAILURE;
