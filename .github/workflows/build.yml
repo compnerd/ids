@@ -31,8 +31,7 @@ jobs:
       with:
         path: ${{ github.workspace }}/build/llvm-project
         key: ${{ runner.os }}-${{ steps.llvm-revision.outputs.revision }}
-    - if: steps.llvm-build.outputs.cache-hit != 'true'
-      run: |
+    - run: |
         cmake -B ${{ github.workspace }}/build/llvm-project -D CMAKE_BUILD_TYPE=Release -S ${{ github.workspace }}/third_party/llvm-project/llvm
         cmake --build ${{ github.workspace }}/build/llvm-project --config Release --target FileCheck
 
