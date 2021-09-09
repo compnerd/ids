@@ -22,3 +22,4 @@ message(STATUS "Found Clang ${Clang_PACKAGE_VERSION}")
 message(STATUS "Using ClangConfig.cmake in ${Clang_DIR}")
 
 add_subdirectory(Sources)
+add_subdirectory(Tests)
