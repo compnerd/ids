@@ -1,6 +1,9 @@
 // Copyright (c) 2021 Saleem Abdulrasool.  All Rights Reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
+// NOTE(compnerd) workaround LLVM 16 not including necessary headers.
+#include <optional>
+
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Frontend/CompilerInstance.h"
