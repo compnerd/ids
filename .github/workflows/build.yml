@@ -8,6 +8,7 @@ on:
 
 env:
   BUILD_TYPE: Release
+  LLVM_VERSION: 17.0.6
 
 jobs:
   build:
@@ -20,7 +21,7 @@ jobs:
     - uses: actions/checkout@v2
       with:
         repository: llvm/llvm-project
-        ref: llvmorg-16.0.4
+        ref: llvmorg-${{ env.LLVM_VERSION }}
         path: third_party/llvm-project
         fetch-depth: 1
     - id: llvm-revision
@@ -36,8 +37,8 @@ jobs:
         cmake --build ${{ github.workspace }}/build/llvm-project --config Release --target FileCheck
 
     - run: |
-        curl -sL https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz -o ${{ github.workspace }}/third_party/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz 
-        tar Jxf ${{ github.workspace }}/third_party/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz -C ${{ github.workspace }}/third_party --strip-components 1
+        curl -sL https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-linux-gnu-ubuntu-22.04.tar.xz -o ${{ github.workspace }}/third_party/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-linux-gnu-ubuntu-22.04.tar.xz 
+        tar Jxf ${{ github.workspace }}/third_party/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-linux-gnu-ubuntu-22.04.tar.xz -C ${{ github.workspace }}/third_party --strip-components 1
 
     - name: Configure CMake
       run: cmake -B ${{ github.workspace }}/build -D CMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -D LLVM_DIR=${{ github.workspace }}/third_party/lib/cmake/llvm -D Clang_DIR=${{ github.workspace }}/third_party/lib/cmake/clang -D FILECHECK_EXECUTABLE=${{ github.workspace }}/build/llvm-project/bin/FileCheck -D LIT_EXECUTABLE=${{ github.workspace }}/third_party/llvm-project/llvm/utils/lit/lit.py
