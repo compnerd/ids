@@ -7,6 +7,7 @@
 #include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
+#include "llvm/ADT/StringExtras.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -18,8 +19,8 @@ llvm::cl::OptionCategory category{"iterface definition scanner options"};
 }
 
 namespace {
-// TODO(compnerd) make this configurable via a configuration file or commandline
-const std::set<std::string> kIgnoredFunctions{
+
+const std::set<std::string> kDefaultIgnoredFunctions{
   "_BitScanForward",
   "_BitScanForward64",
   "_BitScanReverse",
@@ -43,10 +44,49 @@ inplace("inplace", llvm::cl::init(false),
         llvm::cl::desc("Apply suggested changes in-place"),
         llvm::cl::cat(idt::category));
 
+llvm::cl::list<std::string>
+ignored_functions("ignore",
+                  llvm::cl::desc("Ignore one or more functions"),
+                  llvm::cl::value_desc("function-name[,function-name...]"),
+                  llvm::cl::cat(idt::category));
+
+llvm::cl::opt<bool>
+allow_known_builtins("allow-known-builtins", llvm::cl::init(false),
+                     llvm::cl::desc("Do not automatically ignore known built-in functions"),
+                     llvm::cl::cat(idt::category));
+
 template <typename Key, typename Compare, typename Allocator>
 bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
   return set.find(key) != set.end();
 }
+
+const std::set<std::string>& get_ignored_functions() {
+  static auto kIgnoredFunctions = [&]() -> std::set<std::string> {
+      if (ignored_functions.empty()) {
+        if (!allow_known_builtins)
+          return kDefaultIgnoredFunctions;
+
+        return {};
+      }
+
+      std::set<std::string> user_ignored_functions;
+      if (!allow_known_builtins)
+        user_ignored_functions.insert(
+            kDefaultIgnoredFunctions.begin(), kDefaultIgnoredFunctions.end());
+
+      for (const std::string& func_list : ignored_functions) {
+        // Allow function names to be comma-separated without specifying the 
+        // `llvm::cl::CommaSeparated` modifier.
+        auto func_range = llvm::split(func_list, ',');
+        user_ignored_functions.insert(func_range.begin(), func_range.end());
+      }
+
+      return user_ignored_functions;
+    }();
+
+  return kIgnoredFunctions;
+}
+
 }
 
 namespace idt {
@@ -131,7 +171,7 @@ public:
 
     // Ignore known forward declarations (builtins)
     // TODO(compnerd) replace with std::set::contains in C++20
-    if (contains(kIgnoredFunctions, FD->getNameAsString()))
+    if (contains(get_ignored_functions(), FD->getNameAsString()))
       return true;
 
     clang::SourceLocation insertion_point =
