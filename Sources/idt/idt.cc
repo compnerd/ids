@@ -18,7 +18,7 @@
 #include <string>
 
 namespace idt {
-llvm::cl::OptionCategory category{"iterface definition scanner options"};
+llvm::cl::OptionCategory category{"interface definition scanner options"};
 }
 
 namespace {
