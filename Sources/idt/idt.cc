@@ -51,7 +51,7 @@ bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
   return set.find(key) != set.end();
 }
 
-const std::set<std::string>& get_ignored_functions() {
+const std::set<std::string> &get_ignored_functions() {
   static auto kIgnoredFunctions = [&]() -> std::set<std::string> {
       return { ignored_functions.begin(), ignored_functions.end() };
     }();
