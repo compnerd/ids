@@ -10,7 +10,6 @@
 #include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
-#include "llvm/ADT/StringExtras.h"
 
 #include <cstdlib>
 #include <iostream>
