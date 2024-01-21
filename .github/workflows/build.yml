@@ -27,7 +27,7 @@ jobs:
     - id: llvm-revision
       run: |
         echo "::set-output name=revision::$(git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD)"
-    - uses: actions/cache@v2
+    - uses: actions/cache@v4
       id: llvm-build
       with:
         path: ${{ github.workspace }}/build/llvm-project
