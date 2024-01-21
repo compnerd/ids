@@ -23,14 +23,6 @@ llvm::cl::OptionCategory category{"interface definition scanner options"};
 
 namespace {
 
-const std::set<std::string> kDefaultIgnoredFunctions{
-  "_BitScanForward",
-  "_BitScanForward64",
-  "_BitScanReverse",
-  "_BitScanReverse64",
-  "__builtin_strlen",
-};
-
 llvm::cl::opt<std::string>
 export_macro("export-macro",
              llvm::cl::desc("The macro to decorate interfaces with"),
@@ -51,12 +43,8 @@ llvm::cl::list<std::string>
 ignored_functions("ignore",
                   llvm::cl::desc("Ignore one or more functions"),
                   llvm::cl::value_desc("function-name[,function-name...]"),
+                  llvm::cl::CommaSeparated,
                   llvm::cl::cat(idt::category));
-
-llvm::cl::opt<bool>
-allow_known_builtins("allow-known-builtins", llvm::cl::init(false),
-                     llvm::cl::desc("Do not automatically ignore known built-in functions"),
-                     llvm::cl::cat(idt::category));
 
 template <typename Key, typename Compare, typename Allocator>
 bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
@@ -65,26 +53,7 @@ bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
 
 const std::set<std::string>& get_ignored_functions() {
   static auto kIgnoredFunctions = [&]() -> std::set<std::string> {
-      if (ignored_functions.empty()) {
-        if (!allow_known_builtins)
-          return kDefaultIgnoredFunctions;
-
-        return {};
-      }
-
-      std::set<std::string> user_ignored_functions;
-      if (!allow_known_builtins)
-        user_ignored_functions.insert(
-            kDefaultIgnoredFunctions.begin(), kDefaultIgnoredFunctions.end());
-
-      for (const std::string& func_list : ignored_functions) {
-        // Allow function names to be comma-separated without specifying the 
-        // `llvm::cl::CommaSeparated` modifier.
-        auto func_range = llvm::split(func_list, ',');
-        user_ignored_functions.insert(func_range.begin(), func_range.end());
-      }
-
-      return user_ignored_functions;
+      return { ignored_functions.begin(), ignored_functions.end() };
     }();
 
   return kIgnoredFunctions;
