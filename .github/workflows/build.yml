@@ -25,8 +25,7 @@ jobs:
         path: third_party/llvm-project
         fetch-depth: 1
     - id: llvm-revision
-      run: |
-        echo "::set-output name=revision::$(git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD)"
+      run: echo revision=$(git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD) >> ${GITHUB_ENV}
     - uses: actions/cache@v4
       id: llvm-build
       with:
