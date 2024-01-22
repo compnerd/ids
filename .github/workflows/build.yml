@@ -27,12 +27,12 @@ jobs:
         fetch-depth: 1
 
     - id: llvm-revision
-      run: echo revision=$(git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD) >> ${GITHUB_ENV}
+      run: echo llvm_revision=$(git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD) >> ${GITHUB_ENV}
 
     - uses: hendrikmuhs/ccache-action@4cb35b2ff44ce57e1f5f5221e26bd8fefcfe41d0 # main as of 2024-01-21
       with:
         max-size: 10M
-        key: sccache-${{ runner.os }}-${{ steps.llvm-revision.outputs.revision }}
+        key: ${{ runner.os }}-${{ env.llvm_revision }}
         variant: sccache
 
     - name: Configure LLVM
