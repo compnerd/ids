@@ -9,6 +9,7 @@ on:
 env:
   BUILD_TYPE: Release
   LLVM_VERSION: 17.0.6
+  SCCACHE_DIRECT: yes
 
 jobs:
   build:
@@ -24,26 +25,49 @@ jobs:
         ref: llvmorg-${{ env.LLVM_VERSION }}
         path: third_party/llvm-project
         fetch-depth: 1
+
     - id: llvm-revision
       run: echo revision=$(git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD) >> ${GITHUB_ENV}
-    - uses: actions/cache@v4
-      id: llvm-build
+
+    - uses: hendrikmuhs/ccache-action@4cb35b2ff44ce57e1f5f5221e26bd8fefcfe41d0 # main as of 2024-01-21
       with:
-        path: ${{ github.workspace }}/build/llvm-project
-        key: ${{ runner.os }}-${{ steps.llvm-revision.outputs.revision }}
-    - run: |
-        cmake -B ${{ github.workspace }}/build/llvm-project -D CMAKE_BUILD_TYPE=Release -S ${{ github.workspace }}/third_party/llvm-project/llvm
-        cmake --build ${{ github.workspace }}/build/llvm-project --config Release --target FileCheck
+        max-size: 10M
+        key: sccache-${{ runner.os }}-${{ steps.llvm-revision.outputs.revision }}
+        variant: sccache
+
+    - name: Configure LLVM
+      run: >
+        cmake -B ${{ github.workspace }}/build/llvm-project                     \
+              -D CMAKE_BUILD_TYPE=Release                                       \
+              -D CMAKE_C_COMPILER_LAUNCHER=sccache                              \
+              -D CMAKE_CXX_COMPILER_LAUNCHER=sccache                            \
+              -S ${{ github.workspace }}/third_party/llvm-project/llvm
+
+    - name: Build LLVM
+      run: >
+        cmake --build ${{ github.workspace }}/build/llvm-project                \
+              --config Release                                                  \
+              --target FileCheck
 
     - run: |
         curl -sL https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-linux-gnu-ubuntu-22.04.tar.xz -o ${{ github.workspace }}/third_party/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-linux-gnu-ubuntu-22.04.tar.xz 
         tar Jxf ${{ github.workspace }}/third_party/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-linux-gnu-ubuntu-22.04.tar.xz -C ${{ github.workspace }}/third_party --strip-components 1
 
     - name: Configure CMake
-      run: cmake -B ${{ github.workspace }}/build -D CMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -D LLVM_DIR=${{ github.workspace }}/third_party/lib/cmake/llvm -D Clang_DIR=${{ github.workspace }}/third_party/lib/cmake/clang -D FILECHECK_EXECUTABLE=${{ github.workspace }}/build/llvm-project/bin/FileCheck -D LIT_EXECUTABLE=${{ github.workspace }}/third_party/llvm-project/llvm/utils/lit/lit.py
+      run: |
+        cmake -B ${{ github.workspace }}/build                                  \
+              -D CMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}                         \
+              -D LLVM_DIR=${{ github.workspace }}/third_party/lib/cmake/llvm    \
+              -D Clang_DIR=${{ github.workspace }}/third_party/lib/cmake/clang  \
+              -D FILECHECK_EXECUTABLE=${{ github.workspace }}/build/llvm-project/bin/FileCheck \
+              -D LIT_EXECUTABLE=${{ github.workspace }}/third_party/llvm-project/llvm/utils/lit/lit.py
 
     - name: Build
-      run: cmake --build ${{ github.workspace }}/build --config ${{ env.BUILD_TYPE }}
+      run: >
+        cmake --build ${{ github.workspace }}/build                             \
+              --config ${{ env.BUILD_TYPE }}
 
     - name: Test
-      run: cmake --build ${{github.workspace}}/build --target check-ids
+      run: >
+        cmake --build ${{github.workspace}}/build                               \
+              --target check-ids
