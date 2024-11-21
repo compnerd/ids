@@ -127,7 +127,7 @@ public:
       }
 
       // Pure virtual methods cannot be exported.
-      if (MD->isPure())
+      if (MD->isPureVirtual())
         return true;
     }
 
