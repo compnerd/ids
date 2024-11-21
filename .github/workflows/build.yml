@@ -8,7 +8,7 @@ on:
 
 env:
   BUILD_TYPE: Release
-  LLVM_VERSION: 17.0.6
+  LLVM_VERSION: 19.1.4
   SCCACHE_DIRECT: yes
 
 jobs:
@@ -50,13 +50,16 @@ jobs:
               --target FileCheck
 
     - run: |
-        curl -sL https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-linux-gnu-ubuntu-22.04.tar.xz -o ${{ github.workspace }}/third_party/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-linux-gnu-ubuntu-22.04.tar.xz 
-        tar Jxf ${{ github.workspace }}/third_party/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-linux-gnu-ubuntu-22.04.tar.xz -C ${{ github.workspace }}/third_party --strip-components 1
+        curl -sL https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}/LLVM-${{ env.LLVM_VERSION }}-Linux-X64.tar.xz -o ${{ github.workspace }}/third_party/LLVM-${{ env.LLVM_VERSION }}-Linux-X64.tar.xz 
+        tar Jxf ${{ github.workspace }}/third_party/LLVM-${{ env.LLVM_VERSION }}-Linux-X64.tar.xz -C ${{ github.workspace }}/third_party --strip-components 1
 
     - name: Configure CMake
       run: |
         cmake -B ${{ github.workspace }}/build                                  \
               -D CMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}                         \
+              -D CMAKE_C_COMPILER=${{ github.workspace }}/third_party/bin/clang \
+              -D CMAKE_CXX_COMPILER=${{ github.workspace }}/third_party/bin/clang++ \
+              -D CMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld                            \
               -D LLVM_DIR=${{ github.workspace }}/third_party/lib/cmake/llvm    \
               -D Clang_DIR=${{ github.workspace }}/third_party/lib/cmake/clang  \
               -D FILECHECK_EXECUTABLE=${{ github.workspace }}/build/llvm-project/bin/FileCheck \
