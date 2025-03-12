@@ -89,6 +89,20 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     return context_.getFullLoc(TD->getBeginLoc()).getExpansionLoc();
   }
 
+  template <typename Decl_>
+  bool decl_in_header(const Decl_ *D) const {
+    const clang::FullSourceLoc location = get_location(D);
+    const clang::FileID fileID = source_manager_.getFileID(location);
+    if (const auto fileEntryRef = source_manager_.getFileEntryRefForID(fileID)) {
+      const llvm::StringRef &fileName = fileEntryRef->getName();
+      for (const auto &fileExtension: {".h", ".hh", ".hpp", ".hxx"}) {
+        if (fileName.ends_with(fileExtension))
+          return true;
+      }
+    }
+    return false;
+  }
+
 public:
   explicit visitor(clang::ASTContext &context)
       : context_(context), source_manager_(context.getSourceManager()) {}
@@ -165,6 +179,10 @@ public:
 
     // Skip local variables.
     if (VD->getParentFunctionOrMethod() != nullptr)
+      return true;
+
+    // Skip all variable declarations not in header files.
+    if (!decl_in_header(VD))
       return true;
 
     // Skip private static members.
