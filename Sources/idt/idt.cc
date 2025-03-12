@@ -160,6 +160,9 @@ public:
         VD->hasAttr<clang::DLLImportAttr>())
       return true;
 
+    if (VD->hasInit())
+      return true;
+
     // Skip local variables.
     if (VD->getParentFunctionOrMethod() != nullptr)
       return true;
