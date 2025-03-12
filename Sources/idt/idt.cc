@@ -178,7 +178,7 @@ public:
       return true;
 
     // Skip local variables.
-    if (VD->getParentFunctionOrMethod() != nullptr)
+    if (VD->getParentFunctionOrMethod())
       return true;
 
     // Skip all variable declarations not in header files.
