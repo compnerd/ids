@@ -137,7 +137,6 @@ public:
         FD->hasAttr<clang::DLLImportAttr>())
       return true;
 
-    // Ignore known forward declarations (builtins)
     // TODO(compnerd) replace with std::set::contains in C++20
     if (contains(get_ignored_functions(), FD->getNameAsString()))
       return true;
