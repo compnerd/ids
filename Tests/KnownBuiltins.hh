@@ -1,4 +1,4 @@
-// RUN: %idt @%p/../Support/ResponseFiles/ignored-builtins.txt -export-macro IDT_TEST_ABI %s 2>&1 | %FileCheck %s
+// RUN: %idt @%p/../Support/ResponseFiles/ignored-builtins.rsp -export-macro IDT_TEST_ABI %s 2>&1 | %FileCheck %s
 
 unsigned char _BitScanForward(unsigned long *Index, unsigned long Mask);
 // CHECK-NOT: KnownBuiltins.hh:[[@LINE-1]]:{{.*}}
