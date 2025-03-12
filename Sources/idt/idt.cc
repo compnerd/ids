@@ -90,7 +90,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   }
 
   template <typename Decl_>
-  bool decl_in_header(const Decl_ *D) const {
+  bool is_in_header(const Decl_ *D) const {
     const clang::FullSourceLoc location = get_location(D);
   const clang::FileID id = source_manager_.getFileID(location);
   if (const auto entry = source_manager_.getFileEntryRefForID(id)) {
@@ -181,7 +181,7 @@ public:
       return true;
 
     // Skip all variable declarations not in header files.
-    if (!decl_in_header(VD))
+    if (!is_in_header(VD))
       return true;
 
     // Skip private static members.
