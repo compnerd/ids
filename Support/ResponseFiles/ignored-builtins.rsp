@@ -1,5 +1,0 @@
---ignore _BitScanForward
---ignore _BitScanForward64
---ignore _BitScanReverse
---ignore _BitScanReverse64
---ignore __builtin_strlen

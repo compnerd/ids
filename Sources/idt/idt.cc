@@ -18,6 +18,14 @@ llvm::cl::OptionCategory category{"interface definition scanner options"};
 }
 
 namespace {
+// TODO(compnerd) make this configurable via a configuration file or commandline
+const std::set<std::string> kIgnoredBuiltins{
+  "_BitScanForward",
+  "_BitScanForward64",
+  "_BitScanReverse",
+  "_BitScanReverse64",
+  "__builtin_strlen",
+};
 
 llvm::cl::opt<std::string>
 export_macro("export-macro",
@@ -135,6 +143,10 @@ public:
     // TODO(compnerd) this should also handle `__visibility__`
     if (FD->hasAttr<clang::DLLExportAttr>() ||
         FD->hasAttr<clang::DLLImportAttr>())
+      return true;
+
+    // Ignore known forward declarations (builtins)
+    if (contains(kIgnoredBuiltins, FD->getNameAsString()))
       return true;
 
     // TODO(compnerd) replace with std::set::contains in C++20
