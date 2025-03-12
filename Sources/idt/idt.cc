@@ -92,13 +92,12 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   template <typename Decl_>
   bool decl_in_header(const Decl_ *D) const {
     const clang::FullSourceLoc location = get_location(D);
-    const clang::FileID fileID = source_manager_.getFileID(location);
-    if (const auto fileEntryRef = source_manager_.getFileEntryRefForID(fileID)) {
-      const llvm::StringRef &fileName = fileEntryRef->getName();
-      for (const auto &fileExtension: {".h", ".hh", ".hpp", ".hxx"}) {
-        if (fileName.ends_with(fileExtension))
-          return true;
-      }
+  const clang::FileID id = source_manager_.getFileID(location);
+  if (const auto *entry = source_manager_.getFileEntryRefForID(id)) {
+    const llvm::StringRef name = entry->getName();
+    for (const auto &extension : { ".h", ".hh", ".hpp", ".hxx" })
+      if (name.ends_with(extension))
+        return true;
     }
     return false;
   }
