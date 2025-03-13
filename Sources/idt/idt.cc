@@ -44,20 +44,20 @@ inplace("inplace", llvm::cl::init(false),
         llvm::cl::cat(idt::category));
 
 llvm::cl::list<std::string>
-ignored_functions("ignore",
-                  llvm::cl::desc("Ignore one or more functions"),
-                  llvm::cl::value_desc("function-name[,function-name...]"),
-                  llvm::cl::CommaSeparated,
-                  llvm::cl::cat(idt::category));
+ignored_symbols("ignore",
+                llvm::cl::desc("Ignore one or more functions"),
+                llvm::cl::value_desc("function-name[,function-name...]"),
+                llvm::cl::CommaSeparated,
+                llvm::cl::cat(idt::category));
 
 template <typename Key, typename Compare, typename Allocator>
 bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
   return set.find(key) != set.end();
 }
 
-const std::set<std::string> &get_ignored_functions() {
+const std::set<std::string> &get_ignored_symbols() {
   static auto kIgnoredFunctions = [&]() -> std::set<std::string> {
-      return { ignored_functions.begin(), ignored_functions.end() };
+      return { ignored_symbols.begin(), ignored_symbols.end() };
     }();
 
   return kIgnoredFunctions;
@@ -95,6 +95,19 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   template <typename Decl_>
   inline clang::FullSourceLoc get_location(const Decl_ *TD) const {
     return context_.getFullLoc(TD->getBeginLoc()).getExpansionLoc();
+  }
+
+  template <typename Decl_>
+  bool is_in_header(const Decl_ *D) const {
+    const clang::FullSourceLoc location = get_location(D);
+  const clang::FileID id = source_manager_.getFileID(location);
+  if (const auto entry = source_manager_.getFileEntryRefForID(id)) {
+    const llvm::StringRef name = entry->getName();
+    for (const auto &extension : { ".h", ".hh", ".hpp", ".hxx" })
+      if (name.ends_with(extension))
+        return true;
+    }
+    return false;
   }
 
 public:
@@ -150,7 +163,7 @@ public:
       return true;
 
     // TODO(compnerd) replace with std::set::contains in C++20
-    if (contains(get_ignored_functions(), FD->getNameAsString()))
+    if (contains(get_ignored_symbols(), FD->getNameAsString()))
       return true;
 
     clang::SourceLocation insertion_point =
@@ -159,6 +172,46 @@ public:
             : FD->getInnerLocStart();
     unexported_public_interface(location)
         << FD
+        << clang::FixItHint::CreateInsertion(insertion_point,
+                                             export_macro + " ");
+    return true;
+  }
+
+  // VisitVarDecl will visit all variable declarations as well as static fields
+  // in classes and structs. Non-static fields are not visited by this method.
+  bool VisitVarDecl(clang::VarDecl *VD) {
+    if (VD->hasAttr<clang::DLLExportAttr>() ||
+        VD->hasAttr<clang::DLLImportAttr>())
+      return true;
+
+    if (VD->hasInit())
+      return true;
+
+    // Skip local variables.
+    if (VD->getParentFunctionOrMethod())
+      return true;
+
+    // Skip all variable declarations not in header files.
+    if (!is_in_header(VD))
+      return true;
+
+    // Skip private static members.
+    if (VD->getAccess() == clang::AccessSpecifier::AS_private)
+      return true;
+
+    // Skip all other local and global variables unless they are extern.
+    if (!VD->isStaticDataMember() &&
+        VD->getStorageClass() != clang::StorageClass::SC_Extern)
+      return true;
+
+    // TODO(compnerd) replace with std::set::contains in C++20
+    if (contains(get_ignored_symbols(), VD->getNameAsString()))
+      return true;
+
+    clang::FullSourceLoc location = get_location(VD);
+    clang::SourceLocation insertion_point = VD->getBeginLoc();
+    unexported_public_interface(location)
+        << VD
         << clang::FixItHint::CreateInsertion(insertion_point,
                                              export_macro + " ");
     return true;
