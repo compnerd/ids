@@ -12,6 +12,7 @@
 #include <iostream>
 #include <set>
 #include <string>
+#include <optional>
 
 namespace idt {
 llvm::cl::OptionCategory category{"interface definition scanner options"};
@@ -69,27 +70,31 @@ namespace idt {
 class visitor : public clang::RecursiveASTVisitor<visitor> {
   clang::ASTContext &context_;
   clang::SourceManager &source_manager_;
+  std::optional<unsigned> id_unexported_;
+  std::optional<unsigned> id_exported_;
 
   clang::DiagnosticBuilder
   unexported_public_interface(clang::SourceLocation location) {
     clang::DiagnosticsEngine &diagnostics_engine = context_.getDiagnostics();
 
-    static unsigned kID =
-        diagnostics_engine.getCustomDiagID(clang::DiagnosticsEngine::Remark,
-                                           "unexported public interface %0");
+    if (!id_unexported_)
+      id_unexported_ =
+          diagnostics_engine.getCustomDiagID(clang::DiagnosticsEngine::Remark,
+                                             "unexported public interface %0");
 
-    return diagnostics_engine.Report(location, kID);
+    return diagnostics_engine.Report(location, *id_unexported_);
   }
 
   clang::DiagnosticBuilder
   exported_private_interface(clang::SourceLocation location) {
     clang::DiagnosticsEngine &diagnostics_engine = context_.getDiagnostics();
 
-    static unsigned kID =
-        diagnostics_engine.getCustomDiagID(clang::DiagnosticsEngine::Remark,
-                                           "exported private interface %0");
+    if (!id_exported_)
+      id_exported_ =
+          diagnostics_engine.getCustomDiagID(clang::DiagnosticsEngine::Remark,
+                                             "exported private interface %0");
 
-    return diagnostics_engine.Report(location, kID);
+    return diagnostics_engine.Report(location, *id_exported_);
   }
 
   template <typename Decl_>
