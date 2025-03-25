@@ -135,7 +135,7 @@ public:
       return true;
 
     // Ignore friend declarations.
-    if (llvm::isa<clang::FriendDecl>(FD))
+    if (FD->getFriendObjectKind() != clang::Decl::FOK_None)
       return true;
 
     // Ignore deleted and defaulted functions (e.g. operators).
