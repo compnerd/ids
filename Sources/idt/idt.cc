@@ -126,6 +126,10 @@ public:
     if (source_manager_.isInSystemHeader(location))
       return true;
 
+    // Skip declarations not in header files.
+    if (!is_in_header(FD))
+      return true;
+
     // We are only interested in non-dependent types.
     if (FD->isDependentContext())
       return true;
