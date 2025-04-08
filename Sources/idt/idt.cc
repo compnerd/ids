@@ -166,6 +166,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
         source_manager_.getSpellingLoc(std::get<1>(includes.front()));
 
     // Emit the fix-it hint to add the include statement.
+    // TODO: consider using std::format after moving to C++20
     std::string FixText = "#include \"" + include_header + "\"\n";
     clang::FixItHint FixIt =
         clang::FixItHint::CreateInsertion(insertLoc, FixText);
