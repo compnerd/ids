@@ -10,6 +10,7 @@
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
@@ -39,9 +40,11 @@ export_macro("export-macro",
              llvm::cl::value_desc("define"), llvm::cl::Required,
              llvm::cl::cat(idt::category));
 
-llvm::cl::opt<std::string> include_header(
-    "include-header", llvm::cl::desc("Header required for export macro"),
-    llvm::cl::value_desc("header"), llvm::cl::cat(idt::category));
+llvm::cl::opt<std::string>
+include_header("include-header",
+               llvm::cl::desc("Header required for export macro"),
+               llvm::cl::value_desc("header"),
+               llvm::cl::cat(idt::category));
 
 llvm::cl::opt<bool>
 apply_fixits("apply-fixits", llvm::cl::init(false),
@@ -76,13 +79,18 @@ const std::set<std::string> &get_ignored_symbols() {
 }
 
 namespace idt {
-struct IncludeCollector : clang::PPCallbacks {
-  using IncludeInfo = std::tuple<std::string, clang::SourceLocation>;
-  using IncludesMap = std::unordered_map<std::string, std::vector<IncludeInfo>>;
+struct PPCallbacks : clang::PPCallbacks {
+  // Describes the source location of an #include statement and the name of the
+  // file being included.
+  using IncludeLocation = std::tuple<std::string, clang::SourceLocation>;
 
-  explicit IncludeCollector(clang::SourceManager &source_manager,
-                            IncludesMap &includes_map)
-      : source_manager_(source_manager), includes_map_(includes_map) {}
+  // Maps the name of a source file to list of include statements its contains
+  // in the order they are discovered int he file.
+  using FileIncludes =
+      std::unordered_map<std::string, std::vector<IncludeLocation>>;
+
+  PPCallbacks(clang::SourceManager &source_manager, FileIncludes &file_includes)
+      : source_manager_(source_manager), file_includes_(file_includes) {}
 
   void
   InclusionDirective(clang::SourceLocation HashLoc,
@@ -92,25 +100,30 @@ struct IncludeCollector : clang::PPCallbacks {
                      clang::StringRef SearchPath, clang::StringRef RelativePath,
                      const clang::Module *SuggestedModule, bool ModuleImported,
                      clang::SrcMgr::CharacteristicKind FileType) override {
+    // Only track #include statements not #import statements.
+    if (ModuleImported)
+      return;
 
     // Track the name and location of each include in the order discovered.
-    clang::SourceLocation sourceLoc = source_manager_.getSpellingLoc(HashLoc);
-    std::string containingFileName =
-        source_manager_.getFilename(sourceLoc).str();
+    clang::SourceLocation SLoc = source_manager_.getSpellingLoc(HashLoc);
+
+    // Get the name of the file that contains the #include statement. This
+    // string is distinct from the FileName function parameter, which is the
+    // name of the include target (e.g. #include <FileName>).
+    std::string containingFileName = source_manager_.getFilename(SLoc).str();
 
     // Only add the include to the list if it isn't already present.
-    auto &includesList = includes_map_[containingFileName];
-    auto found = std::find_if(includesList.begin(), includesList.end(),
-                              [&FileName](const IncludeInfo &include) {
-                                return std::get<0>(include) == FileName.str();
-                              });
-    if (found == includesList.end())
-      includesList.emplace_back(FileName.str(), sourceLoc);
+    auto &includes = file_includes_[containingFileName];
+    if (std::none_of(includes.begin(), includes.end(),
+                     [&FileName](const IncludeLocation &include) {
+                       return std::get<0>(include) == FileName.str();
+                     }))
+      includes.emplace_back(FileName.str(), SLoc);
   }
 
 private:
   clang::SourceManager &source_manager_;
-  IncludesMap &includes_map_;
+  FileIncludes &file_includes_;
 };
 
 class visitor : public clang::RecursiveASTVisitor<visitor> {
@@ -118,7 +131,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   clang::SourceManager &source_manager_;
   std::optional<unsigned> id_unexported_;
   std::optional<unsigned> id_exported_;
-  IncludeCollector::IncludesMap &includes_map_;
+  PPCallbacks::FileIncludes &file_includes_;
 
   void add_missing_include(clang::SourceLocation location) {
     if (include_header.empty())
@@ -132,27 +145,25 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     clang::SourceLocation spellingLoc =
         source_manager_.getSpellingLoc(location);
     const std::string fileName = source_manager_.getFilename(spellingLoc).str();
-    auto &includesList = includes_map_[fileName];
+    auto &includes = file_includes_[fileName];
 
     // TODO: if the modified file contains no existing include directives, we
     // cannot currently determine where to insert the required include.
-    if (includesList.empty())
+    if (includes.empty())
       return;
 
     // Determine if the header is already included.
-    auto position =
-        std::find_if(includesList.begin(), includesList.end(),
-                     [](const IncludeCollector::IncludeInfo &include) {
-                       return std::get<0>(include) == include_header;
-                     });
-    if (position != includesList.end())
+    if (std::any_of(includes.begin(), includes.end(),
+                    [](const PPCallbacks::IncludeLocation &include) {
+                      return std::get<0>(include) == include_header;
+                    }))
       return;
 
     // Insert the new include at the start of the existing include list. Rely
     // on clang-format to properly sort the include statements in alphabetical
     // order.
     clang::SourceLocation insertLoc =
-        source_manager_.getSpellingLoc(std::get<1>(includesList.front()));
+        source_manager_.getSpellingLoc(std::get<1>(includes.front()));
 
     // Emit the fix-it hint to add the include statement.
     std::string FixText = "#include \"" + include_header + "\"\n";
@@ -161,8 +172,8 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     diagnostics_engine.Report(insertLoc, kID) << include_header << FixIt;
 
     // Add the new include to our list so we don't add it again.
-    includesList.insert(
-        includesList.begin(),
+    includes.insert(
+        includes.begin(),
         std::tuple(static_cast<std::string>(include_header), insertLoc));
   }
 
@@ -200,21 +211,20 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   template <typename Decl_>
   bool is_in_header(const Decl_ *D) const {
     const clang::FullSourceLoc location = get_location(D);
-    const clang::FileID id = source_manager_.getFileID(location);
-    if (const auto entry = source_manager_.getFileEntryRefForID(id)) {
-      const llvm::StringRef name = entry->getName();
-      for (const auto &extension : {".h", ".hh", ".hpp", ".hxx"})
-        if (name.ends_with(extension))
-          return true;
+  const clang::FileID id = source_manager_.getFileID(location);
+  if (const auto entry = source_manager_.getFileEntryRefForID(id)) {
+    const llvm::StringRef name = entry->getName();
+    for (const auto &extension : {".h", ".hh", ".hpp", ".hxx"})
+      if (name.ends_with(extension))
+        return true;
     }
     return false;
   }
 
 public:
-  explicit visitor(clang::ASTContext &context,
-                   IncludeCollector::IncludesMap &includes_map)
+  visitor(clang::ASTContext &context, PPCallbacks::FileIncludes &file_includes)
       : context_(context), source_manager_(context.getSourceManager()),
-        includes_map_(includes_map) {}
+        file_includes_(file_includes) {}
 
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {
     clang::FullSourceLoc location = get_location(FD);
@@ -342,9 +352,8 @@ class consumer : public clang::ASTConsumer {
   std::unique_ptr<clang::FixItRewriter> rewriter_;
 
 public:
-  explicit consumer(clang::ASTContext &context,
-                    IncludeCollector::IncludesMap &includes_map)
-      : visitor_(context, includes_map) {}
+  consumer(clang::ASTContext &context, PPCallbacks::FileIncludes &file_includes)
+      : visitor_(context, file_includes) {}
 
   void HandleTranslationUnit(clang::ASTContext &context) override {
     if (apply_fixits) {
@@ -367,29 +376,28 @@ public:
 struct action : clang::ASTFrontendAction {
   void ExecuteAction() override {
     if (!include_header.empty())
-      installIncludeCollector();
-
+      installPPCallbacks();
     clang::ASTFrontendAction::ExecuteAction();
   }
 
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &CI, llvm::StringRef) override {
-    return std::make_unique<idt::consumer>(CI.getASTContext(), includes_map_);
+    return std::make_unique<idt::consumer>(CI.getASTContext(), file_includes_);
   }
 
 private:
   // Install a callback that will be invoked on every preprocessor include
   // statement. This is done so we can determine if a user-specified custom
   // include statment needs to be added if any annotations are added.
-  void installIncludeCollector() {
+  void installPPCallbacks() {
     clang::CompilerInstance &compiler_instance = getCompilerInstance();
     clang::Preprocessor &preprocessor = compiler_instance.getPreprocessor();
     clang::SourceManager &source_manager = compiler_instance.getSourceManager();
     preprocessor.addPPCallbacks(
-        std::make_unique<IncludeCollector>(source_manager, includes_map_));
+        std::make_unique<PPCallbacks>(source_manager, file_includes_));
   }
 
-  IncludeCollector::IncludesMap includes_map_;
+  PPCallbacks::FileIncludes file_includes_;
 };
 
 struct factory : clang::tooling::FrontendActionFactory {
