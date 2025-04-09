@@ -321,6 +321,11 @@ public:
         VD->getStorageClass() != clang::StorageClass::SC_Extern)
       return true;
 
+    // Skip static variables in non-specialized template classes and structs.
+    auto *RD = llvm::dyn_cast<clang::CXXRecordDecl>(VD->getDeclContext());
+    if (RD && RD->getDescribedClassTemplate())
+      return true;
+
     // TODO(compnerd) replace with std::set::contains in C++20
     if (contains(get_ignored_symbols(), VD->getNameAsString()))
       return true;
