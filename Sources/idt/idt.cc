@@ -321,10 +321,16 @@ public:
         VD->getStorageClass() != clang::StorageClass::SC_Extern)
       return true;
 
-    // Skip static variables in non-specialized template classes and structs.
-    auto *RD = llvm::dyn_cast<clang::CXXRecordDecl>(VD->getDeclContext());
-    if (RD && RD->getDescribedClassTemplate())
-      return true;
+    // Skip static variables declared in template class unless the template is
+    // fully specialized.
+    if (auto *RD = llvm::dyn_cast<clang::CXXRecordDecl>(VD->getDeclContext())) {
+      if (RD->getDescribedClassTemplate())
+        return true;
+
+      if (auto *CTSD = llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(RD))
+        if (llvm::isa<clang::ClassTemplatePartialSpecializationDecl>(CTSD))
+          return true;
+    }
 
     // TODO(compnerd) replace with std::set::contains in C++20
     if (contains(get_ignored_symbols(), VD->getNameAsString()))
