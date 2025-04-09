@@ -226,11 +226,11 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   bool is_symbol_exported(const Decl_ *D) const {
     // Check if the symbol is annotated with __declspec(dllimport) or
     // __declspec(dllexport).
-    if (D->hasAttr<clang::DLLExportAttr>() ||
-        D->hasAttr<clang::DLLImportAttr>())
+    if (D->template hasAttr<clang::DLLExportAttr>() ||
+        D->template hasAttr<clang::DLLImportAttr>())
       return true;
 
-    const auto visibilityAttr = D->getAttr<clang::VisibilityAttr>();
+    const auto visibilityAttr = D->template getAttr<clang::VisibilityAttr>();
     if (!visibilityAttr)
       return false;
 
