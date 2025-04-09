@@ -230,14 +230,11 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
         D->template hasAttr<clang::DLLImportAttr>())
       return true;
 
-    const auto visibilityAttr = D->template getAttr<clang::VisibilityAttr>();
-    if (!visibilityAttr)
-      return false;
-
     // Check if the symbol is annotated with [[gnu::visibility("default")]]
     // or the equivalent __attribute__((visibility("default")))
-    return visibilityAttr->getVisibility() ==
-      clang::VisibilityAttr::VisibilityType::Default;
+    const auto visibilityAttr = D->template getAttr<clang::VisibilityAttr>();
+    return visibilityAttr && (visibilityAttr->getVisibility() ==
+      clang::VisibilityAttr::VisibilityType::Default);
   }
 
 public:
