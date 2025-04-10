@@ -233,7 +233,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     // Check if the symbol is annotated with [[gnu::visibility("default")]]
     // or the equivalent __attribute__((visibility("default")))
     if (const auto *VA = D->template getAttr<clang::VisibilityAttr>())
-      return VA->getVisibility() == clang::VisibilityAttr::VsibilityType::Default;
+      return VA->getVisibility() == clang::VisibilityAttr::VisibilityType::Default;
     return false;
   }
 
