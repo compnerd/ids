@@ -222,6 +222,21 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     return false;
   }
 
+  template <typename Decl_>
+  bool is_symbol_exported(const Decl_ *D) const {
+    // Check if the symbol is annotated with __declspec(dllimport) or
+    // __declspec(dllexport).
+    if (D->template hasAttr<clang::DLLExportAttr>() ||
+        D->template hasAttr<clang::DLLImportAttr>())
+      return true;
+
+    // Check if the symbol is annotated with [[gnu::visibility("default")]]
+    // or the equivalent __attribute__((visibility("default")))
+    if (const auto *VA = D->template getAttr<clang::VisibilityAttr>())
+      return VA->getVisibility() == clang::VisibilityAttr::VisibilityType::Default;
+    return false;
+  }
+
 public:
   visitor(clang::ASTContext &context, PPCallbacks::FileIncludes &file_includes)
       : context_(context), source_manager_(context.getSourceManager()),
@@ -257,8 +272,7 @@ public:
     if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD)) {
       // Ignore private members (except for a negative check).
       if (MD->getAccess() == clang::AccessSpecifier::AS_private) {
-        // TODO(compnerd) this should also handle `__visibility__`
-        if (MD->hasAttr<clang::DLLExportAttr>())
+        if (is_symbol_exported(MD))
           // TODO(compnerd) this should emit a fix-it to remove the attribute
           exported_private_interface(location) << MD;
         return true;
@@ -270,9 +284,7 @@ public:
     }
 
     // If the function has a dll-interface, it is properly annotated.
-    // TODO(compnerd) this should also handle `__visibility__`
-    if (FD->hasAttr<clang::DLLExportAttr>() ||
-        FD->hasAttr<clang::DLLImportAttr>())
+    if (is_symbol_exported(FD))
       return true;
 
     // Ignore known forward declarations (builtins)
@@ -297,8 +309,7 @@ public:
   // VisitVarDecl will visit all variable declarations as well as static fields
   // in classes and structs. Non-static fields are not visited by this method.
   bool VisitVarDecl(clang::VarDecl *VD) {
-    if (VD->hasAttr<clang::DLLExportAttr>() ||
-        VD->hasAttr<clang::DLLImportAttr>())
+    if (is_symbol_exported(VD))
       return true;
 
     if (VD->hasInit())
