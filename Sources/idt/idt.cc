@@ -270,7 +270,7 @@ public:
       return true;
 
     // Skip template class template argument deductions.
-    if (const auto *DG = llvm::dyn_cast<clang::CXXDeductionGuideDecl>(FD))
+    if (llvm::isa<clang::CXXDeductionGuideDecl>(FD))
       return true;
 
     if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD)) {
