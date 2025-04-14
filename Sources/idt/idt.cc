@@ -269,6 +269,10 @@ public:
     if (FD->isDeleted() || FD->isDefaulted())
       return true;
 
+    // Skip template class template argument deductions.
+    if (llvm::isa<clang::CXXDeductionGuideDecl>(FD))
+      return true;
+
     if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD)) {
       // Ignore private members (except for a negative check).
       if (MD->getAccess() == clang::AccessSpecifier::AS_private) {
