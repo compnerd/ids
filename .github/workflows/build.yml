@@ -13,7 +13,7 @@ env:
   SCCACHE_DIRECT: yes
 
 jobs:
-  build:
+  build-ubuntu:
     # TODO(compnerd) convert this to a build matrix
     runs-on: ubuntu-latest
 
