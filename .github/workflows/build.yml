@@ -13,7 +13,7 @@ env:
   SCCACHE_DIRECT: yes
 
 jobs:
-  build:
+  build-ubuntu:
     # TODO(compnerd) convert this to a build matrix
     runs-on: ubuntu-latest
 
@@ -30,9 +30,8 @@ jobs:
     - id: llvm-revision
       run: echo llvm_revision=$(git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD) >> ${GITHUB_ENV}
 
-    - uses: hendrikmuhs/ccache-action@4cb35b2ff44ce57e1f5f5221e26bd8fefcfe41d0 # main as of 2024-01-21
+    - uses: hendrikmuhs/ccache-action@a1209f81afb8c005c13b4296c32e363431bffea5 # v1.2.17 release (2025-02-03)
       with:
-        max-size: 10M
         key: ${{ runner.os }}-${{ env.llvm_revision }}
         variant: sccache
 
@@ -74,4 +73,72 @@ jobs:
     - name: Test
       run: >
         cmake --build ${{github.workspace}}/build                               \
+              --target check-ids
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Checkout LLVM
+      uses: actions/checkout@v4
+      with:
+        repository: llvm/llvm-project
+        ref: llvmorg-${{ env.LLVM_VERSION }}
+        path: third_party/llvm-project
+        fetch-depth: 1
+
+    - id: llvm-revision
+      run: |
+        $llvm_revision = git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD
+        echo "llvm_revision=$llvm_revision" >> $env:GITHUB_ENV
+
+    - uses: hendrikmuhs/ccache-action@a1209f81afb8c005c13b4296c32e363431bffea5 # v1.2.17 release (2025-02-03)
+      with:
+        key: ${{ runner.os }}-${{ env.llvm_revision }}
+        variant: sccache
+
+    - name: Setup VSDevEnv
+      uses: compnerd/gha-setup-vsdevenv@v6
+      with:
+        components: "Microsoft.VisualStudio.Component.VC.Tools.x86.x64;Microsoft.VisualStudio.Workload.NativeDesktop"
+
+    - name: Configure LLVM
+      run: |
+        cmake -B ${{ github.workspace }}/build/llvm-project                     `
+              -D LLVM_ENABLE_PROJECTS="lld;clang"                               `
+              -D LLVM_TARGETS_TO_BUILD="host"                                   `
+              -D CMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}                         `
+              -D CMAKE_C_COMPILER_LAUNCHER=sccache                              `
+              -D CMAKE_CXX_COMPILER_LAUNCHER=sccache                            `
+              -S ${{ github.workspace }}/third_party/llvm-project/llvm          `
+              -G Ninja
+
+    - name: Build LLVM
+      run: |
+        cmake --build ${{ github.workspace }}/build/llvm-project                `
+              --config ${{ env.BUILD_TYPE }}
+
+    - name: Configure IDS
+      run: |
+        cmake -B ${{ github.workspace }}/build                                                          `
+              -D CMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}                                                 `
+              -D CMAKE_C_COMPILER=${{ github.workspace }}/build/llvm-project/bin/clang.exe              `
+              -D CMAKE_CXX_COMPILER=${{ github.workspace }}/build/llvm-project/bin/clang++.exe          `
+              -D LLVM_DIR=${{ github.workspace }}/build/llvm-project/lib/cmake/llvm                     `
+              -D Clang_DIR=${{ github.workspace }}/build/llvm-project/lib/cmake/clang                   `
+              -D FILECHECK_EXECUTABLE=${{ github.workspace }}/build/llvm-project/bin/FileCheck          `
+              -D LIT_EXECUTABLE=${{ github.workspace }}/third_party/llvm-project/llvm/utils/lit/lit.py  `
+              -D CMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld                                                    `
+              -G Ninja
+
+    - name: Build IDS
+      run: |
+        cmake --build ${{ github.workspace }}/build                             `
+              --config ${{ env.BUILD_TYPE }}
+
+    - name: Test IDS
+      run: |
+        cmake --build ${{github.workspace}}/build                               `
               --target check-ids
