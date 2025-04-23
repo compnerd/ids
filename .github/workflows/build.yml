@@ -30,7 +30,7 @@ jobs:
     - id: llvm-revision
       run: echo llvm_revision=$(git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD) >> ${GITHUB_ENV}
 
-    - uses: hendrikmuhs/ccache-action@v1.2.17
+    - uses: hendrikmuhs/ccache-action@a1209f81afb8c005c13b4296c32e363431bffea5 # v1.2.17 release (2025-02-03)
       with:
         key: ${{ runner.os }}-${{ env.llvm_revision }}
         variant: sccache
@@ -94,7 +94,7 @@ jobs:
         $llvm_revision = git -C ${{ github.workspace }}/third_party/llvm-project rev-parse HEAD
         echo "llvm_revision=$llvm_revision" >> $env:GITHUB_ENV
 
-    - uses: hendrikmuhs/ccache-action@v1.2.17
+    - uses: hendrikmuhs/ccache-action@a1209f81afb8c005c13b4296c32e363431bffea5 # v1.2.17 release (2025-02-03)
       with:
         key: ${{ runner.os }}-${{ env.llvm_revision }}
         variant: sccache
