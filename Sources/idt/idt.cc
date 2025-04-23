@@ -242,6 +242,21 @@ public:
       : context_(context), source_manager_(context.getSourceManager()),
         file_includes_(file_includes) {}
 
+  bool TraverseCXXRecordDecl(clang::CXXRecordDecl *CD) {
+    // Skip declarations.
+    if (!CD->isThisDeclarationADefinition())
+      return true;
+
+    // Skip anonymous record.
+    if (CD->isAnonymousStructOrUnion())
+      return true;
+
+    if (!RecursiveASTVisitor::TraverseCXXRecordDecl(CD))
+      return false;
+
+    return true;
+  }
+
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {
     clang::FullSourceLoc location = get_location(FD);
 
