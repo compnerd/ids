@@ -100,7 +100,6 @@ jobs:
         variant: sccache
 
     - name: Setup VSDevEnv
-      if: runner.os == 'Windows'
       uses: compnerd/gha-setup-vsdevenv@v6
       with:
         components: "Microsoft.VisualStudio.Component.VC.Tools.x86.x64;Microsoft.VisualStudio.Workload.NativeDesktop"
