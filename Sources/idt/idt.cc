@@ -259,25 +259,14 @@ public:
 
     const bool is_exported_record = is_symbol_exported(CD);
     if (!is_exported_record && should_export_record) {
-      // Insert the annotation immediately following the class/struct/union
-      // keyword.
-      clang::LangOptions lang_opts = CD->getASTContext().getLangOpts();
-      clang::SourceLocation loc = CD->getBeginLoc();
-      while (loc.isValid()) {
-        clang::Token token;
-        if (clang::Lexer::getRawToken(loc, token, source_manager_, lang_opts))
-          break;
-
-        loc = token.getEndLoc();
-        if (token.is(clang::tok::kw_class) || token.is(clang::tok::kw_struct) ||
-            token.is(clang::tok::kw_union))
-          break;
-      }
-
+      // Insert the annotation immediately before the class/struct/union name,
+      // which is the position returned by getLocation.
+      clang::LangOptions LO = CD->getASTContext().getLangOpts();
+      clang::SourceLocation loc = CD->getLocation();
       const clang::SourceLocation location =
           context_.getFullLoc(loc).getExpansionLoc();
       unexported_public_interface(location)
-          << CD << clang::FixItHint::CreateInsertion(loc, " " + export_macro);
+          << CD << clang::FixItHint::CreateInsertion(loc, export_macro + " ");
     }
 
     // Save/restore the current value of in_exported_record_ to support nested
