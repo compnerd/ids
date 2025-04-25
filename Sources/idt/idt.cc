@@ -252,10 +252,9 @@ public:
     // exported on non-Windows platforms. Do this regardless of the method's
     // access level.
     bool should_export_record = false;
-    for (const auto *MD : CD->methods()) {
+    for (const auto *MD : CD->methods())
       if ((should_export_record = (MD->isVirtual() && !MD->hasBody())))
         break;
-    }
 
     const bool is_exported_record = is_symbol_exported(CD);
     if (!is_exported_record && should_export_record) {
