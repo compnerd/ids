@@ -289,11 +289,24 @@ public:
 
   // RecursiveASTVisitor::TraverseCXXRecordDecl does not get called for fully
   // specialized template declarations. Since we may want to export them,
-  // manually invoke TraverseCXXRecordDecl whenever a specialization
-  // declaration is found.
+  // manually invoke TraverseCXXRecordDecl whenever an explicit specialization
+  // is found.
   bool TraverseClassTemplateSpecializationDecl(
       clang::ClassTemplateSpecializationDecl *SD) {
-    return TraverseCXXRecordDecl(SD);
+    switch (SD->getSpecializationKind()) {
+    case clang::TSK_ExplicitSpecialization:
+      return TraverseCXXRecordDecl(SD);
+
+    // TODO: consider annotation explicit template instantiation declarations
+    // and definitions in the future. They may require unique annotation macros
+    // due to differences between visibility and dllexport/dllimport attributes.
+    case clang::TSK_ExplicitInstantiationDeclaration:
+      [[fallthrough]];
+    case clang::TSK_ExplicitInstantiationDefinition:
+      [[fallthrough]];
+    default:
+      return true;
+    }
   }
 
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {

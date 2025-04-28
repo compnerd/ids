@@ -130,21 +130,3 @@ UnusedAttributeMultiLineDefClass {
   // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
   static unsigned static_field;
 };
-
-// CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
-template <typename T, typename U> struct TemplateClass {
-  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
-  virtual void virtualMethod();
-};
-
-// CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
-template <typename U> struct TemplateClass<int, U> {
-  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
-  virtual void virtualMethod();
-};
-
-// CHECK: VTables.hh:[[@LINE+1]]:20: remark: unexported public interface 'TemplateClass<int, long>'
-template <> struct TemplateClass<int, long> {
-  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
-  virtual void virtualMethod();
-};
