@@ -258,6 +258,10 @@ public:
                (MD->isVirtual() && !MD->hasBody())))
         break;
 
+    // Skip exporting template classes. For fully-specialized template classes,
+    // isTemplated() returns false so they will be annotated if needed.
+    should_export_record = should_export_record && !RD->isTemplated();
+
     const bool is_exported_record = is_symbol_exported(RD);
     if (!is_exported_record && should_export_record) {
       // Insert the annotation immediately before the tag name, which is the
@@ -281,6 +285,15 @@ public:
     const bool result = RecursiveASTVisitor::TraverseCXXRecordDecl(RD);
     in_exported_record_ = old_in_exported_record;
     return result;
+  }
+
+  // RecursiveASTVisitor::TraverseCXXRecordDecl does not get called for fully
+  // specialized template declarations. Since we may want to export them,
+  // manually invoke TraverseCXXRecordDecl whenever a specialization
+  // declaration is found.
+  bool TraverseClassTemplateSpecializationDecl(
+      clang::ClassTemplateSpecializationDecl *SD) {
+    return TraverseCXXRecordDecl(SD);
   }
 
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {
