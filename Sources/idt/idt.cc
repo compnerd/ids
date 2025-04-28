@@ -133,6 +133,10 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   std::optional<unsigned> id_exported_;
   PPCallbacks::FileIncludes &file_includes_;
 
+  // This member is set to true when the containing record being traversed (if
+  // any) is already annotated for export.
+  bool in_exported_record_ = false;
+
   void add_missing_include(clang::SourceLocation location) {
     if (include_header.empty())
       return;
@@ -242,6 +246,41 @@ public:
       : context_(context), source_manager_(context.getSourceManager()),
         file_includes_(file_includes) {}
 
+  bool TraverseCXXRecordDecl(clang::CXXRecordDecl *RD) {
+    // If a class declaration contains an out-of-line virtual method, annotate
+    // the class instead of its individual members. This ensures its vtable is
+    // exported on non-Windows platforms. Do this regardless of the method's
+    // access level.
+    bool should_export_record = false;
+    for (const auto *MD : RD->methods())
+      if ((should_export_record = (MD->isVirtual() && !MD->hasBody())))
+        break;
+
+    const bool is_exported_record = is_symbol_exported(RD);
+    if (!is_exported_record && should_export_record) {
+      // Insert the annotation immediately before the tag name, which is the
+      // position returned by getLocation.
+      clang::LangOptions LO = RD->getASTContext().getLangOpts();
+      clang::SourceLocation SLoc = RD->getLocation();
+      const clang::SourceLocation location =
+          context_.getFullLoc(SLoc).getExpansionLoc();
+      unexported_public_interface(location)
+          << RD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
+    }
+
+    // Save/restore the current value of in_exported_record_ to support nested
+    // record definitions.
+    const bool old_in_exported_record = in_exported_record_;
+    in_exported_record_ = is_exported_record || should_export_record;
+
+    // Traverse the class by invoking the parent's version of this method. This
+    // call is required even if the record is exported because it may contain
+    // nested records.
+    const bool result = RecursiveASTVisitor::TraverseCXXRecordDecl(RD);
+    in_exported_record_ = old_in_exported_record;
+    return result;
+  }
+
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {
     clang::FullSourceLoc location = get_location(FD);
 
@@ -291,6 +330,11 @@ public:
     if (is_symbol_exported(FD))
       return true;
 
+    // If the containing record is exported, do not annotate individual members.
+    // TODO: if the symbol is already exported, emit a fix-it to remove it.
+    if (in_exported_record_)
+      return true;
+
     // Ignore known forward declarations (builtins)
     if (contains(kIgnoredBuiltins, FD->getNameAsString()))
       return true;
@@ -314,6 +358,11 @@ public:
   // in classes and structs. Non-static fields are not visited by this method.
   bool VisitVarDecl(clang::VarDecl *VD) {
     if (is_symbol_exported(VD))
+      return true;
+
+    // If the containing record is exported, do not annotate individual members.
+    // TODO: if the symbol is already exported, emit a fix-it to remove it.
+    if (in_exported_record_)
       return true;
 
     if (VD->hasInit())

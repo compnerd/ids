@@ -76,3 +76,35 @@ __attribute__((unused)) void functionUnused1();
 
 void __attribute__((unused)) functionUnused2();
 // CHECK: Attributes.hh:[[@LINE-1]]:{{.*}}: remark: unexported public interface 'functionUnused2'
+
+struct EXPORT_ABI ClassDLLExport {
+// CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+  void method();
+  // CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+  static unsigned static_field;
+  // CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+};
+
+struct IMPORT_ABI ClassDLLImport {
+// CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+  void method();
+  // CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+  static unsigned static_field;
+  // CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+};
+
+struct __attribute__((visibility("default"))) ClassVisibilityDefault {
+// CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+  void method();
+  // CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+  static unsigned static_field;
+  // CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+};
+
+struct [[gnu::visibility("default")]] ClassGnuVisibilityDefault {
+// CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+  void method();
+  // CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+  static unsigned static_field;
+  // CHECK-NOT: Attributes.hh:[[@LINE-1]]:{{.*}}
+};
