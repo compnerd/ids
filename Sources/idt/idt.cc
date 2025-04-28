@@ -255,7 +255,7 @@ public:
     for (const auto *MD : RD->methods())
       if ((should_export_record =
                !(MD->isPureVirtual() || MD->isDefaulted() || MD->isDeleted()) &&
-               (MD->isVirtual() && !MD->hasBody());
+               (MD->isVirtual() && !MD->hasBody())))
         break;
 
     const bool is_exported_record = is_symbol_exported(RD);
