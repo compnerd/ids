@@ -297,7 +297,7 @@ public:
     case clang::TSK_ExplicitSpecialization:
       return TraverseCXXRecordDecl(SD);
 
-    // TODO: consider annotation explicit template instantiation declarations
+    // TODO: consider annotating explicit template instantiation declarations
     // and definitions in the future. They may require unique annotation macros
     // due to differences between visibility and dllexport/dllimport attributes.
     case clang::TSK_ExplicitInstantiationDeclaration:
