@@ -10,13 +10,54 @@ struct ClassWithInlineVirtualMethod {
   static unsigned static_field;
 };
 
+// CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+struct ClassWithDefaultVirtualDestructor {
+  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+  virtual ~ClassWithDefaultVirtualDestructor() = default;
+};
+
+// CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+struct ClassWithDeletedVirtualDestructor {
+  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+  virtual ~ClassWithDeletedVirtualDestructor() = delete;
+};
+
+// CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+struct ClassWithPureVirtualMethod {
+  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+  virtual void virtualMethod() = 0;
+};
+
 // CHECK: VTables.hh:[[@LINE+1]]:8: remark: unexported public interface 'ClassWithExternVirtualMethod'
 struct ClassWithExternVirtualMethod {
-private:
   // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
-  virtual void virtualMedhod();
+  virtual void virtualMethod();
   // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
   void method();
+};
+
+// CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+struct DerivedClassWithInlineOverriddenExternVirtualMethod : public ClassWithExternVirtualMethod {
+  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+  void virtualMethod() override {}
+};
+
+// CHECK: VTables.hh:[[@LINE+1]]:8: remark: unexported public interface 'DerivedClassWithExternOverriddenExternVirtualMethod'
+struct DerivedClassWithExternOverriddenExternVirtualMethod : public ClassWithExternVirtualMethod {
+  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+  void virtualMethod() override;
+};
+
+// CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+struct DerivedClassWithInlineOverriddenPureVirtualMethod : public ClassWithPureVirtualMethod {
+  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+  void virtualMethod() override {}
+};
+
+// CHECK: VTables.hh:[[@LINE+1]]:8: remark: unexported public interface 'DerivedClassWithExternOverriddenPureVirtualMethod'
+struct DerivedClassWithExternOverriddenPureVirtualMethod : public ClassWithPureVirtualMethod {
+  // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}
+  void virtualMethod() override;
 };
 
 // CHECK-NOT: VTables.hh:[[@LINE+1]]:{{.*}}

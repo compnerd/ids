@@ -253,7 +253,9 @@ public:
     // access level.
     bool should_export_record = false;
     for (const auto *MD : RD->methods())
-      if ((should_export_record = (MD->isVirtual() && !MD->hasBody())))
+      if ((should_export_record =
+               !(MD->isPureVirtual() || MD->isDefaulted() || MD->isDeleted()) &&
+               (MD->isVirtual() && !MD->hasBody())))
         break;
 
     const bool is_exported_record = is_symbol_exported(RD);
