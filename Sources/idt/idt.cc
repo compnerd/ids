@@ -381,7 +381,7 @@ public:
       return true;
 
     // Skip all other local and global variables unless they are extern.
-    if (!VD->isStatiRDataMember() &&
+    if (!VD->isStaticDataMember() &&
         VD->getStorageClass() != clang::StorageClass::SC_Extern)
       return true;
 
