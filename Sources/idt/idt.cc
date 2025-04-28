@@ -246,26 +246,26 @@ public:
       : context_(context), source_manager_(context.getSourceManager()),
         file_includes_(file_includes) {}
 
-  bool TraverseCXXRecordDecl(clang::CXXRecordDecl *CD) {
-    // If a class declaration contains a virtual method without a body, annotate
+  bool TraverseCXXRecordDecl(clang::CXXRecordDecl *RD) {
+    // If a class declaration contains an out-of-line virtual method, annotate
     // the class instead of its individual members. This ensures its vtable is
     // exported on non-Windows platforms. Do this regardless of the method's
     // access level.
     bool should_export_record = false;
-    for (const auto *MD : CD->methods())
+    for (const auto *MD : RD->methods())
       if ((should_export_record = (MD->isVirtual() && !MD->hasBody())))
         break;
 
-    const bool is_exported_record = is_symbol_exported(CD);
+    const bool is_exported_record = is_symbol_exported(RD);
     if (!is_exported_record && should_export_record) {
-      // Insert the annotation immediately before the class/struct/union name,
-      // which is the position returned by getLocation.
-      clang::LangOptions LO = CD->getASTContext().getLangOpts();
-      clang::SourceLocation loc = CD->getLocation();
+      // Insert the annotation immediately before the tag name, which is the
+      // position returned by getLocation.
+      clang::LangOptions LO = RD->getASTContext().getLangOpts();
+      clang::SourceLocation SLoc = RD->getLocation();
       const clang::SourceLocation location =
-          context_.getFullLoc(loc).getExpansionLoc();
+          context_.getFullLoc(SLoc).getExpansionLoc();
       unexported_public_interface(location)
-          << CD << clang::FixItHint::CreateInsertion(loc, export_macro + " ");
+          << RD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
     }
 
     // Save/restore the current value of in_exported_record_ to support nested
@@ -276,7 +276,7 @@ public:
     // Traverse the class by invoking the parent's version of this method. This
     // call is required even if the record is exported because it may contain
     // nested records.
-    const bool result = RecursiveASTVisitor::TraverseCXXRecordDecl(CD);
+    const bool result = RecursiveASTVisitor::TraverseCXXRecordDecl(RD);
     in_exported_record_ = old_in_exported_record;
     return result;
   }
@@ -381,7 +381,7 @@ public:
       return true;
 
     // Skip all other local and global variables unless they are extern.
-    if (!VD->isStaticDataMember() &&
+    if (!VD->isStatiRDataMember() &&
         VD->getStorageClass() != clang::StorageClass::SC_Extern)
       return true;
 
