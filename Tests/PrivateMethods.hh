@@ -40,3 +40,19 @@ inline void friendFunction(const WithPrivateMethods &obj) {
   // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
   return obj.privateMethodForFriend();
 }
+
+// CHECK: PrivateMethods.hh:[[@LINE+1]]:7: remark: unexported public interface 'VTableWithPrivateMethods'
+class VTableWithPrivateMethods {
+public:
+  // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
+  virtual int publicVirtualMethod();
+
+  // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
+  inline int protectedInlineMethod() {
+    return privateMethod() + publicVirtualMethod();
+  }
+
+private:
+  // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
+  int privateMethod();
+};

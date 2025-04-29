@@ -133,9 +133,9 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   std::optional<unsigned> id_exported_;
   PPCallbacks::FileIncludes &file_includes_;
 
-  // This member is set to true when the containing record being traversed (if
-  // any) is already annotated for export.
-  bool in_exported_record_ = false;
+  // Accumulates the unique locations of records that we have exported. Location
+  // is used only as a unique identifier for a record declaration.
+  std::set<clang::SourceLocation> exported_record_locations_;
 
   void add_missing_include(clang::SourceLocation location) {
     if (include_header.empty())
@@ -238,21 +238,87 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     // or the equivalent __attribute__((visibility("default")))
     if (const auto *VA = D->template getAttr<clang::VisibilityAttr>())
       return VA->getVisibility() == clang::VisibilityAttr::VisibilityType::Default;
+
+    if (!llvm::isa<clang::FunctionDecl>(D) && !llvm::isa<clang::VarDecl>(D))
+      return false;
+
+    // For variable and function declarations, check to see if the containing
+    // record, if any, is exported.
+    for (const clang::DeclContext *DC = D->getDeclContext(); DC; DC = DC->getParent())
+      if (const auto *RD = llvm::dyn_cast<clang::RecordDecl>(DC))
+        return is_symbol_exported(RD) ||
+          (exported_record_locations_.find(RD->getLocation()) != exported_record_locations_.end());
+
     return false;
   }
 
+  void export_function_if_needed(const clang::FunctionDecl *FD) {
+    // Check if the symbol is already exported.
+    if (is_symbol_exported(FD))
+      return;
+
+    // Ignore declarations from the system.
+    clang::FullSourceLoc location = get_location(FD);
+    if (source_manager_.isInSystemHeader(location))
+      return;
+
+    // Skip declarations not in header files.
+    if (!is_in_header(FD))
+      return;
+
+    // We are only interested in non-dependent types.
+    if (FD->isDependentContext())
+      return;
+
+    // If the function has a body, it can be materialized by the user.
+    if (FD->hasBody())
+      return;
+
+    // Ignore friend declarations.
+    if (FD->getFriendObjectKind() != clang::Decl::FOK_None)
+      return;
+
+    // Ignore deleted and defaulted functions (e.g. operators).
+    if (FD->isDeleted() || FD->isDefaulted())
+      return;
+
+    // Skip template class template argument deductions.
+    if (llvm::isa<clang::CXXDeductionGuideDecl>(FD))
+      return;
+
+    // Pure virtual methods cannot be exported.
+    if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD))
+      if (MD->isPureVirtual())
+        return;
+
+    // Ignore known forward declarations (builtins)
+    if (contains(kIgnoredBuiltins, FD->getNameAsString()))
+      return;
+
+    // TODO(compnerd) replace with std::set::contains in C++20
+    if (contains(get_ignored_symbols(), FD->getNameAsString()))
+      return;
+
+    clang::SourceLocation insertion_point =
+        FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
+            ? FD->getBeginLoc()
+            : FD->getInnerLocStart();
+    unexported_public_interface(location)
+       << FD
+        << clang::FixItHint::CreateInsertion(insertion_point,
+                                             export_macro + " ");
+  }
+
   // Determine if a tagged type needs exporting at the record level.
-  // Returns true if the record has been, or was already, annotated. Returns
-  // false otherwise.
-  bool export_record_if_needed(clang::CXXRecordDecl *RD) {
+  void export_record_if_needed(clang::CXXRecordDecl *RD) {
     // Check if the class is already exported.
     if (is_symbol_exported(RD))
-      return true;
+      return;
 
     // Skip exporting template classes. For fully-specialized template classes,
     // isTemplated() returns false so they will be annotated if needed.
     if (RD->isTemplated())
-      return false;
+      return;
 
     // If a class declaration contains an out-of-line virtual method, annotate
     // the class instead of its individual members. This ensures its vtable is
@@ -266,7 +332,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
         break;
 
     if (!should_export_record)
-      return false;
+      return;
 
     // Insert the annotation immediately before the tag name, which is the
     // position returned by getLocation.
@@ -277,66 +343,11 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     unexported_public_interface(location)
         << RD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
 
-    return true;
-  }
-
-  bool export_function_if_needed(const clang::FunctionDecl *FD) {
-    // Check if the symbol is already exported.
-    if (is_symbol_exported(FD))
-      return true;
-
-    clang::FullSourceLoc location = get_location(FD);
-
-    // Ignore declarations from the system.
-    if (source_manager_.isInSystemHeader(location))
-      return false;
-
-    // Skip declarations not in header files.
-    if (!is_in_header(FD))
-      return false;
-
-    // We are only interested in non-dependent types.
-    if (FD->isDependentContext())
-      return false;
-
-    // If the function has a body, it can be materialized by the user.
-    if (FD->hasBody())
-      return false;
-
-    // Ignore friend declarations.
-    if (FD->getFriendObjectKind() != clang::Decl::FOK_None)
-      return false;
-
-    // Ignore deleted and defaulted functions (e.g. operators).
-    if (FD->isDeleted() || FD->isDefaulted())
-      return false;
-
-    // Skip template class template argument deductions.
-    if (llvm::isa<clang::CXXDeductionGuideDecl>(FD))
-      return false;
-
-    // Pure virtual methods cannot be exported.
-    if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD))
-      if (MD->isPureVirtual())
-        return false;
-
-    // Ignore known forward declarations (builtins)
-    if (contains(kIgnoredBuiltins, FD->getNameAsString()))
-      return false;
-
-    // TODO(compnerd) replace with std::set::contains in C++20
-    if (contains(get_ignored_symbols(), FD->getNameAsString()))
-      return false;
-
-    clang::SourceLocation insertion_point =
-        FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
-            ? FD->getBeginLoc()
-            : FD->getInnerLocStart();
-    unexported_public_interface(location)
-       << FD
-        << clang::FixItHint::CreateInsertion(insertion_point,
-                                             export_macro + " ");
-    return true;
+    // Track the set of records that we have explicitly exported. This info is
+    // used later when examining members to determine whether or not they should
+    // be individually exported.
+    exported_record_locations_.insert(SLoc);
+    return;
   }
 
 public:
@@ -345,17 +356,12 @@ public:
         file_includes_(file_includes) {}
 
   bool TraverseCXXRecordDecl(clang::CXXRecordDecl *RD) {
-    // Save/restore the current value of in_exported_record_ to support nested
-    // record definitions.
-    const bool old_in_exported_record = in_exported_record_;
-    in_exported_record_ = export_record_if_needed(RD);
+    export_record_if_needed(RD);
 
     // Traverse the class by invoking the parent's version of this method. This
     // call is required even if the record is exported because it may contain
     // nested records.
-    const bool result = RecursiveASTVisitor::TraverseCXXRecordDecl(RD);
-    in_exported_record_ = old_in_exported_record;
-    return result;
+    return RecursiveASTVisitor::TraverseCXXRecordDecl(RD);
   }
 
   // RecursiveASTVisitor::TraverseCXXRecordDecl does not get called for fully
@@ -383,17 +389,13 @@ public:
   }
 
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {
-    // If the containing record is exported, do not annotate individual members.
-    // TODO: if the symbol is already exported, emit a fix-it to remove it.
-    if (in_exported_record_)
-      return true;
-
-    // Ignore private members.
+    // Ignore private member functions. Any that require export will be
+    // determined by VisitCalLExpr instead.
     if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD))
       if (MD->getAccess() == clang::AccessSpecifier::AS_private)
         return true;
 
-    (void)export_function_if_needed(FD);
+    export_function_if_needed(FD);
     return true;
   }
 
@@ -409,7 +411,7 @@ public:
     if (!MD)
       return true;
 
-    (void)export_function_if_needed(MD);
+    export_function_if_needed(MD);
     return true;
   }
 
@@ -417,11 +419,6 @@ public:
   // in classes and structs. Non-static fields are not visited by this method.
   bool VisitVarDecl(clang::VarDecl *VD) {
     if (is_symbol_exported(VD))
-      return true;
-
-    // If the containing record is exported, do not annotate individual members.
-    // TODO: if the symbol is already exported, emit a fix-it to remove it.
-    if (in_exported_record_)
       return true;
 
     if (VD->hasInit())
