@@ -13,7 +13,8 @@ public:
 
   // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
   static inline void publicStaticInlineMethod() {
-    privateStaticMethod();
+    if (privateStaticField > 0)
+      privateStaticMethod();
   }
 
 private:
@@ -24,6 +25,9 @@ private:
   int privateInlineMethod() {
     return 0;
   }
+
+  // CHECK: PrivateMethods.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateStaticField'
+  static int privateStaticField;
 
   // CHECK: PrivateMethods.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateStaticMethod'
   static void privateStaticMethod();

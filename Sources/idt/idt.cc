@@ -252,6 +252,8 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     return false;
   }
 
+  // Determine if a function needs exporting and add the export annotation as
+  // required.
   void export_function_if_needed(const clang::FunctionDecl *FD) {
     // Check if the symbol is already exported.
     if (is_symbol_exported(FD))
@@ -309,7 +311,55 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
                                              export_macro + " ");
   }
 
-  // Determine if a tagged type needs exporting at the record level.
+  // Determine if a variable needs exporting and add the export annotation as
+  // required. This only applies to extern globals and static member fields.
+  void export_variable_if_needed(const clang::VarDecl *VD) {
+    // Check if the symbol is already exported.
+    if (is_symbol_exported(VD))
+      return;
+
+    // Skip local variables. We are only interested in static fields.
+    if (VD->getParentFunctionOrMethod())
+      return;
+
+    // Skip static fields that have initializers.
+    if (VD->hasInit())
+      return;
+
+    // Skip all variable declarations not in header files.
+    if (!is_in_header(VD))
+      return;
+
+    // Skip all other local and global variables unless they are extern.
+    if (!VD->isStaticDataMember() &&
+        VD->getStorageClass() != clang::StorageClass::SC_Extern)
+      return;
+
+    // Skip static variables declared in template class unless the template is
+    // fully specialized.
+    if (auto *RD = llvm::dyn_cast<clang::CXXRecordDecl>(VD->getDeclContext())) {
+      if (RD->getDescribedClassTemplate())
+        return;
+
+      if (auto *CTSD = llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(RD))
+        if (llvm::isa<clang::ClassTemplatePartialSpecializationDecl>(CTSD))
+          return;
+    }
+
+    // TODO(compnerd) replace with std::set::contains in C++20
+    if (contains(get_ignored_symbols(), VD->getNameAsString()))
+      return;
+
+    clang::FullSourceLoc location = get_location(VD);
+    clang::SourceLocation insertion_point = VD->getBeginLoc();
+    unexported_public_interface(location)
+        << VD
+        << clang::FixItHint::CreateInsertion(insertion_point,
+                                             export_macro + " ");
+  }
+
+  // Determine if a tagged type needs exporting at the record level and add the
+  // export annotation as required.
   void export_record_if_needed(clang::CXXRecordDecl *RD) {
     // Check if the class is already exported.
     if (is_symbol_exported(RD))
@@ -388,9 +438,11 @@ public:
     }
   }
 
+  // VisitFunctionDecl will visit all function declarations. This includes top-
+  // level functions as well as class member and static functions.
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {
-    // Ignore private member functions. Any that require export will be
-    // determined by VisitCalLExpr instead.
+    // Ignore private member function declarations. Any that require export will
+    // be identified by VisitCallExpr.
     if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD))
       if (MD->getAccess() == clang::AccessSpecifier::AS_private)
         return true;
@@ -411,57 +463,43 @@ public:
     if (!MD)
       return true;
 
-    export_function_if_needed(MD);
+    // Only consider private methods here. Non-private methods will be
+    // considered for export by  VisitFunctionDecl.
+    if (MD->getAccess() == clang::AccessSpecifier::AS_private)
+      export_function_if_needed(MD);
+
     return true;
   }
 
   // VisitVarDecl will visit all variable declarations as well as static fields
   // in classes and structs. Non-static fields are not visited by this method.
   bool VisitVarDecl(clang::VarDecl *VD) {
-    if (is_symbol_exported(VD))
-      return true;
-
-    if (VD->hasInit())
-      return true;
-
-    // Skip local variables.
-    if (VD->getParentFunctionOrMethod())
-      return true;
-
-    // Skip all variable declarations not in header files.
-    if (!is_in_header(VD))
-      return true;
-
-    // Skip private static members.
+    // Ignore private static field declarations. Any that require export will be
+    // identified by VisitDeclRefExpr.
     if (VD->getAccess() == clang::AccessSpecifier::AS_private)
       return true;
 
-    // Skip all other local and global variables unless they are extern.
-    if (!VD->isStaticDataMember() &&
-        VD->getStorageClass() != clang::StorageClass::SC_Extern)
+    export_variable_if_needed(VD);
+    return true;
+  }
+
+  // Visit every variable reference in the compilation unit to determine if
+  // there are any inline references to private, static member fields. In this
+  // uncommon case, the private field must be annotated for export.
+  bool VisitDeclRefExpr(clang::DeclRefExpr *DRE) {
+    // Only consider expresions referencing variable declarations. This includes
+    // static fields and local variables but not member variables, which are
+    // type FieldDecl.
+    auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl());
+    if (!VD)
       return true;
 
-    // Skip static variables declared in template class unless the template is
-    // fully specialized.
-    if (auto *RD = llvm::dyn_cast<clang::CXXRecordDecl>(VD->getDeclContext())) {
-      if (RD->getDescribedClassTemplate())
-        return true;
-
-      if (auto *CTSD = llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(RD))
-        if (llvm::isa<clang::ClassTemplatePartialSpecializationDecl>(CTSD))
-          return true;
-    }
-
-    // TODO(compnerd) replace with std::set::contains in C++20
-    if (contains(get_ignored_symbols(), VD->getNameAsString()))
+    // Only consider private fields here. Non-private fields will be considered
+    // for export by VisitVarDecl.
+    if (VD->getAccess() != clang::AccessSpecifier::AS_private)
       return true;
 
-    clang::FullSourceLoc location = get_location(VD);
-    clang::SourceLocation insertion_point = VD->getBeginLoc();
-    unexported_public_interface(location)
-        << VD
-        << clang::FixItHint::CreateInsertion(insertion_point,
-                                             export_macro + " ");
+    export_variable_if_needed(VD);
     return true;
   }
 };
