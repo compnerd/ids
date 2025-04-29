@@ -241,7 +241,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     return false;
   }
 
-  // Determine if a class/struct/union needs exporting at the record level.
+  // Determine if a tagged type needs exporting at the record level.
   // Returns true if the record has been, or was already, annotated. Returns
   // false otherwise.
   bool export_record_if_needed(clang::CXXRecordDecl *RD) {
