@@ -280,6 +280,65 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     return true;
   }
 
+  bool export_function_if_needed(const clang::FunctionDecl *FD) {
+    // Check if the symbol is already exported.
+    if (is_symbol_exported(FD))
+      return true;
+
+    clang::FullSourceLoc location = get_location(FD);
+
+    // Ignore declarations from the system.
+    if (source_manager_.isInSystemHeader(location))
+      return false;
+
+    // Skip declarations not in header files.
+    if (!is_in_header(FD))
+      return false;
+
+    // We are only interested in non-dependent types.
+    if (FD->isDependentContext())
+      return false;
+
+    // If the function has a body, it can be materialized by the user.
+    if (FD->hasBody())
+      return false;
+
+    // Ignore friend declarations.
+    if (FD->getFriendObjectKind() != clang::Decl::FOK_None)
+      return false;
+
+    // Ignore deleted and defaulted functions (e.g. operators).
+    if (FD->isDeleted() || FD->isDefaulted())
+      return false;
+
+    // Skip template class template argument deductions.
+    if (llvm::isa<clang::CXXDeductionGuideDecl>(FD))
+      return false;
+
+    // Pure virtual methods cannot be exported.
+    if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD))
+      if (MD->isPureVirtual())
+        return false;
+
+    // Ignore known forward declarations (builtins)
+    if (contains(kIgnoredBuiltins, FD->getNameAsString()))
+      return false;
+
+    // TODO(compnerd) replace with std::set::contains in C++20
+    if (contains(get_ignored_symbols(), FD->getNameAsString()))
+      return false;
+
+    clang::SourceLocation insertion_point =
+        FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
+            ? FD->getBeginLoc()
+            : FD->getInnerLocStart();
+    unexported_public_interface(location)
+       << FD
+        << clang::FixItHint::CreateInsertion(insertion_point,
+                                             export_macro + " ");
+    return true;
+  }
+
 public:
   visitor(clang::ASTContext &context, PPCallbacks::FileIncludes &file_includes)
       : context_(context), source_manager_(context.getSourceManager()),
@@ -324,75 +383,33 @@ public:
   }
 
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {
-    clang::FullSourceLoc location = get_location(FD);
-
-    // Ignore declarations from the system.
-    if (source_manager_.isInSystemHeader(location))
-      return true;
-
-    // Skip declarations not in header files.
-    if (!is_in_header(FD))
-      return true;
-
-    // We are only interested in non-dependent types.
-    if (FD->isDependentContext())
-      return true;
-
-    // If the function has a body, it can be materialized by the user.
-    if (FD->hasBody())
-      return true;
-
-    // Ignore friend declarations.
-    if (FD->getFriendObjectKind() != clang::Decl::FOK_None)
-      return true;
-
-    // Ignore deleted and defaulted functions (e.g. operators).
-    if (FD->isDeleted() || FD->isDefaulted())
-      return true;
-
-    // Skip template class template argument deductions.
-    if (llvm::isa<clang::CXXDeductionGuideDecl>(FD))
-      return true;
-
-    if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD)) {
-      // Ignore private members (except for a negative check).
-      if (MD->getAccess() == clang::AccessSpecifier::AS_private) {
-        if (is_symbol_exported(MD))
-          // TODO(compnerd) this should emit a fix-it to remove the attribute
-          exported_private_interface(location) << MD;
-        return true;
-      }
-
-      // Pure virtual methods cannot be exported.
-      if (MD->isPureVirtual())
-        return true;
-    }
-
-    // If the function has a dll-interface, it is properly annotated.
-    if (is_symbol_exported(FD))
-      return true;
-
     // If the containing record is exported, do not annotate individual members.
     // TODO: if the symbol is already exported, emit a fix-it to remove it.
     if (in_exported_record_)
       return true;
 
-    // Ignore known forward declarations (builtins)
-    if (contains(kIgnoredBuiltins, FD->getNameAsString()))
+    // Ignore private members.
+    if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD))
+      if (MD->getAccess() == clang::AccessSpecifier::AS_private)
+        return true;
+
+    (void)export_function_if_needed(FD);
+    return true;
+  }
+
+  // Visit every function call in the compilation unit to determine if there are
+  // any inline calls to private member functions. In this uncommon case, the
+  // private method must be annotated for export.
+  bool VisitCallExpr(clang::CallExpr *CE) {
+    const clang::FunctionDecl *FD = CE->getDirectCallee();
+    if (!FD)
       return true;
 
-    // TODO(compnerd) replace with std::set::contains in C++20
-    if (contains(get_ignored_symbols(), FD->getNameAsString()))
+    const clang::CXXMethodDecl *MD = llvm::dyn_cast<clang::CXXMethodDecl>(FD);
+    if (!MD)
       return true;
 
-    clang::SourceLocation insertion_point =
-        FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
-            ? FD->getBeginLoc()
-            : FD->getInnerLocStart();
-    unexported_public_interface(location)
-        << FD
-        << clang::FixItHint::CreateInsertion(insertion_point,
-                                             export_macro + " ");
+    (void)export_function_if_needed(MD);
     return true;
   }
 
