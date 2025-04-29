@@ -8,18 +8,28 @@ public:
 
   // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
   inline int publicInlineMethod() {
-    return privateMethod() + publicMethod();
+    if (privateMethod() > 0)
+      return privateMethod() + publicMethod();
+
+    privateStaticInlineMethod();
+
+    return privateMethod() - publicMethod();
   }
 
   // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
   static inline void publicStaticInlineMethod() {
+    privateStaticField += 1;
+
     if (privateStaticField > 0)
       privateStaticMethod();
+
+    privateStaticInlineMethod();
   }
 
 private:
   // CHECK: PrivateMethods.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateMethod'
   int privateMethod();
+  // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateMethod'
 
   // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
   int privateInlineMethod() {
@@ -28,9 +38,13 @@ private:
 
   // CHECK: PrivateMethods.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateStaticField'
   static int privateStaticField;
+  // CHECK-NOT: PrivateMethods.hh:[[@LINE-1]]:3: remark: unexported public interface 'privateStaticField'
 
   // CHECK: PrivateMethods.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateStaticMethod'
   static void privateStaticMethod();
+
+  // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
+  static void privateStaticInlineMethod() {}
 
   // CHECK-NOT: PrivateMethods.hh:[[@LINE+1]]:{{.*}}
   friend void friendFunction(const WithPrivateMethods &obj);

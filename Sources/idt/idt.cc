@@ -126,6 +126,29 @@ private:
   FileIncludes &file_includes_;
 };
 
+// Track a set of clang::Decl declarations by unique ID.
+class DeclSet {
+  std::set<std::uintptr_t> decls_;
+
+  // Use the raw address of the canonical declaration object as a unique
+  // identifier.
+  template <typename Decl_>
+  std::uintptr_t decl_id(const Decl_ *D) const {
+    return reinterpret_cast<std::uintptr_t>(D->getCanonicalDecl());
+  }
+
+public:
+  template <typename Decl_>
+  inline void insert(const Decl_ *D) {
+    decls_.insert(decl_id(D));
+  }
+
+  template <typename Decl_>
+  inline bool contains(const Decl_ *D) const {
+    return decls_.find(decl_id(D)) != decls_.end();
+  }
+};
+
 class visitor : public clang::RecursiveASTVisitor<visitor> {
   clang::ASTContext &context_;
   clang::SourceManager &source_manager_;
@@ -133,9 +156,9 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   std::optional<unsigned> id_exported_;
   PPCallbacks::FileIncludes &file_includes_;
 
-  // Accumulates the unique locations of records that we have exported. Location
-  // is used only as a unique identifier for a record declaration.
-  std::set<clang::SourceLocation> exported_record_locations_;
+  // Accumulates the set of declarations that have been marked for export by
+  // this visitor.
+  DeclSet exported_decls_;
 
   void add_missing_include(clang::SourceLocation location) {
     if (include_header.empty())
@@ -183,8 +206,9 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   }
 
   clang::DiagnosticBuilder
-  unexported_public_interface(clang::SourceLocation location) {
+  unexported_public_interface(clang::SourceLocation location, const clang::Decl *D) {
     add_missing_include(location);
+    exported_decls_.insert(D);
 
     clang::DiagnosticsEngine &diagnostics_engine = context_.getDiagnostics();
 
@@ -228,6 +252,10 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
 
   template <typename Decl_>
   bool is_symbol_exported(const Decl_ *D) const {
+    // Check the set of symbols we've already marked for export.
+    if (exported_decls_.contains(D))
+      return true;
+
     // Check if the symbol is annotated with __declspec(dllimport) or
     // __declspec(dllexport).
     if (D->template hasAttr<clang::DLLExportAttr>() ||
@@ -239,15 +267,14 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     if (const auto *VA = D->template getAttr<clang::VisibilityAttr>())
       return VA->getVisibility() == clang::VisibilityAttr::VisibilityType::Default;
 
-    if (!llvm::isa<clang::FunctionDecl>(D) && !llvm::isa<clang::VarDecl>(D))
+    if (llvm::isa<clang::RecordDecl>(D))
       return false;
 
-    // For variable and function declarations, check to see if the containing
-    // record, if any, is exported.
+    // For non-record declarations, check to see if the containing record, if
+    // any, is exported. This exports the member as well.
     for (const clang::DeclContext *DC = D->getDeclContext(); DC; DC = DC->getParent())
       if (const auto *RD = llvm::dyn_cast<clang::RecordDecl>(DC))
-        return is_symbol_exported(RD) ||
-          (exported_record_locations_.find(RD->getLocation()) != exported_record_locations_.end());
+        return is_symbol_exported(RD);
 
     return false;
   }
@@ -274,6 +301,10 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
 
     // If the function has a body, it can be materialized by the user.
     if (FD->hasBody())
+      return;
+
+    // Skip methods in template declarations.
+    if (FD->getTemplateInstantiationPattern() != nullptr)
       return;
 
     // Ignore friend declarations.
@@ -305,7 +336,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
         FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
             ? FD->getBeginLoc()
             : FD->getInnerLocStart();
-    unexported_public_interface(location)
+    unexported_public_interface(location, FD)
        << FD
         << clang::FixItHint::CreateInsertion(insertion_point,
                                              export_macro + " ");
@@ -335,6 +366,10 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
         VD->getStorageClass() != clang::StorageClass::SC_Extern)
       return;
 
+    // Skip fields in template declarations.
+    if (VD->getTemplateInstantiationPattern() != nullptr)
+      return;
+
     // Skip static variables declared in template class unless the template is
     // fully specialized.
     if (auto *RD = llvm::dyn_cast<clang::CXXRecordDecl>(VD->getDeclContext())) {
@@ -351,10 +386,10 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
       return;
 
     clang::FullSourceLoc location = get_location(VD);
-    clang::SourceLocation insertion_point = VD->getBeginLoc();
-    unexported_public_interface(location)
+    clang::SourceLocation SLoc = VD->getBeginLoc();
+    unexported_public_interface(location, VD)
         << VD
-        << clang::FixItHint::CreateInsertion(insertion_point,
+        << clang::FixItHint::CreateInsertion(SLoc,
                                              export_macro + " ");
   }
 
@@ -390,14 +425,8 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     clang::SourceLocation SLoc = RD->getLocation();
     const clang::SourceLocation location =
         context_.getFullLoc(SLoc).getExpansionLoc();
-    unexported_public_interface(location)
+    unexported_public_interface(location, RD)
         << RD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
-
-    // Track the set of records that we have explicitly exported. This info is
-    // used later when examining members to determine whether or not they should
-    // be individually exported.
-    exported_record_locations_.insert(SLoc);
-    return;
   }
 
 public:
