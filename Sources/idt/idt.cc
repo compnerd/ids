@@ -241,12 +241,19 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     return false;
   }
 
-public:
-  visitor(clang::ASTContext &context, PPCallbacks::FileIncludes &file_includes)
-      : context_(context), source_manager_(context.getSourceManager()),
-        file_includes_(file_includes) {}
+  // Determine if a tagged type needs exporting at the record level.
+  // Returns true if the record has been, or was already, annotated. Returns
+  // false otherwise.
+  bool export_record_if_needed(clang::CXXRecordDecl *RD) {
+    // Check if the class is already exported.
+    if (is_symbol_exported(RD))
+      return true;
 
-  bool TraverseCXXRecordDecl(clang::CXXRecordDecl *RD) {
+    // Skip exporting template classes. For fully-specialized template classes,
+    // isTemplated() returns false so they will be annotated if needed.
+    if (RD->isTemplated())
+      return false;
+
     // If a class declaration contains an out-of-line virtual method, annotate
     // the class instead of its individual members. This ensures its vtable is
     // exported on non-Windows platforms. Do this regardless of the method's
@@ -258,22 +265,31 @@ public:
                (MD->isVirtual() && !MD->hasBody())))
         break;
 
-    const bool is_exported_record = is_symbol_exported(RD);
-    if (!is_exported_record && should_export_record) {
-      // Insert the annotation immediately before the tag name, which is the
-      // position returned by getLocation.
-      clang::LangOptions LO = RD->getASTContext().getLangOpts();
-      clang::SourceLocation SLoc = RD->getLocation();
-      const clang::SourceLocation location =
-          context_.getFullLoc(SLoc).getExpansionLoc();
-      unexported_public_interface(location)
-          << RD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
-    }
+    if (!should_export_record)
+      return false;
 
+    // Insert the annotation immediately before the tag name, which is the
+    // position returned by getLocation.
+    clang::LangOptions LO = RD->getASTContext().getLangOpts();
+    clang::SourceLocation SLoc = RD->getLocation();
+    const clang::SourceLocation location =
+        context_.getFullLoc(SLoc).getExpansionLoc();
+    unexported_public_interface(location)
+        << RD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
+
+    return true;
+  }
+
+public:
+  visitor(clang::ASTContext &context, PPCallbacks::FileIncludes &file_includes)
+      : context_(context), source_manager_(context.getSourceManager()),
+        file_includes_(file_includes) {}
+
+  bool TraverseCXXRecordDecl(clang::CXXRecordDecl *RD) {
     // Save/restore the current value of in_exported_record_ to support nested
     // record definitions.
     const bool old_in_exported_record = in_exported_record_;
-    in_exported_record_ = is_exported_record || should_export_record;
+    in_exported_record_ = export_record_if_needed(RD);
 
     // Traverse the class by invoking the parent's version of this method. This
     // call is required even if the record is exported because it may contain
@@ -281,6 +297,30 @@ public:
     const bool result = RecursiveASTVisitor::TraverseCXXRecordDecl(RD);
     in_exported_record_ = old_in_exported_record;
     return result;
+  }
+
+  // RecursiveASTVisitor::TraverseCXXRecordDecl does not get called for fully
+  // specialized template declarations. Since we may want to export them,
+  // manually invoke TraverseCXXRecordDecl whenever an explicit specialization
+  // is found.
+  bool TraverseClassTemplateSpecializationDecl(
+      clang::ClassTemplateSpecializationDecl *SD) {
+    switch (SD->getSpecializationKind()) {
+    case clang::TSK_ExplicitSpecialization:
+      // This call visits class template specialization record and recursively
+      // visits all of it children, which may also require export.
+      return TraverseCXXRecordDecl(SD);
+
+    // TODO: consider annotating explicit template instantiation declarations
+    // and definitions in the future. They may require unique annotation macros
+    // due to differences between visibility and dllexport/dllimport attributes.
+    case clang::TSK_ExplicitInstantiationDeclaration:
+      [[fallthrough]];
+    case clang::TSK_ExplicitInstantiationDefinition:
+      [[fallthrough]];
+    default:
+      return true;
+    }
   }
 
   bool VisitFunctionDecl(clang::FunctionDecl *FD) {
