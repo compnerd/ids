@@ -308,7 +308,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
       return;
 
     // Skip methods in template declarations.
-    if (!FD->getTemplateInstantiationPattern())
+    if (FD->getTemplateInstantiationPattern())
       return;
 
     // Ignore friend declarations.
