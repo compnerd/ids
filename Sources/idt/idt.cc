@@ -251,6 +251,11 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   }
 
   template <typename Decl_>
+  inline bool is_in_system_header(const Decl_ *D) const {
+    return source_manager_.isInSystemHeader(get_location(D));
+  }
+
+  template <typename Decl_>
   bool is_symbol_exported(const Decl_ *D) const {
     // Check the set of symbols we've already marked for export.
     if (exported_decls_.contains(D))
@@ -287,8 +292,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
       return;
 
     // Ignore declarations from the system.
-    clang::FullSourceLoc location = get_location(FD);
-    if (source_manager_.isInSystemHeader(location))
+    if (is_in_system_header(FD))
       return;
 
     // Skip declarations not in header files.
@@ -332,14 +336,12 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     if (contains(get_ignored_symbols(), FD->getNameAsString()))
       return;
 
-    clang::SourceLocation insertion_point =
+    clang::SourceLocation SLoc =
         FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
             ? FD->getBeginLoc()
             : FD->getInnerLocStart();
-    unexported_public_interface(location, FD)
-       << FD
-        << clang::FixItHint::CreateInsertion(insertion_point,
-                                             export_macro + " ");
+    unexported_public_interface(get_location(FD), FD)
+        << FD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
   }
 
   // Determine if a variable needs exporting and add the export annotation as
@@ -347,6 +349,10 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   void export_variable_if_needed(const clang::VarDecl *VD) {
     // Check if the symbol is already exported.
     if (is_symbol_exported(VD))
+      return;
+
+    // Ignore declarations from the system.
+    if (is_in_system_header(VD))
       return;
 
     // Skip local variables. We are only interested in static fields.
@@ -385,12 +391,9 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     if (contains(get_ignored_symbols(), VD->getNameAsString()))
       return;
 
-    clang::FullSourceLoc location = get_location(VD);
     clang::SourceLocation SLoc = VD->getBeginLoc();
-    unexported_public_interface(location, VD)
-        << VD
-        << clang::FixItHint::CreateInsertion(SLoc,
-                                             export_macro + " ");
+    unexported_public_interface(get_location(VD), VD)
+        << VD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
   }
 
   // Determine if a tagged type needs exporting at the record level and add the
@@ -398,6 +401,10 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   void export_record_if_needed(clang::CXXRecordDecl *RD) {
     // Check if the class is already exported.
     if (is_symbol_exported(RD))
+      return;
+
+    // Ignore declarations from the system.
+    if (is_in_system_header(RD))
       return;
 
     // Skip exporting template classes. For fully-specialized template classes,
