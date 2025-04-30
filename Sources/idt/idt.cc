@@ -130,8 +130,7 @@ private:
 class DeclSet {
   std::set<std::uintptr_t> decls_;
 
-  // Use the raw address of the canonical declaration object as a unique
-  // identifier.
+  // Use pointer identity of the canonical declaration object as a unique ID.
   template <typename Decl_>
   std::uintptr_t decl_id(const Decl_ *D) const {
     return reinterpret_cast<std::uintptr_t>(D->getCanonicalDecl());
@@ -206,7 +205,12 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   }
 
   clang::DiagnosticBuilder
-  unexported_public_interface(clang::SourceLocation location, const clang::Decl *D) {
+  unexported_public_interface(const clang::Decl *D) {
+    return unexported_public_interface(D, get_location(D));
+  }
+
+  clang::DiagnosticBuilder
+  unexported_public_interface(const clang::Decl *D, clang::SourceLocation location) {
     add_missing_include(location);
     exported_decls_.insert(D);
 
@@ -275,8 +279,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     if (llvm::isa<clang::RecordDecl>(D))
       return false;
 
-    // For non-record declarations, check to see if the containing record, if
-    // any, is exported. This exports the member as well.
+    // For non-record declarations, the DeclContext is the containing record.
     for (const clang::DeclContext *DC = D->getDeclContext(); DC; DC = DC->getParent())
       if (const auto *RD = llvm::dyn_cast<clang::RecordDecl>(DC))
         return is_symbol_exported(RD);
@@ -340,7 +343,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
         FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
             ? FD->getBeginLoc()
             : FD->getInnerLocStart();
-    unexported_public_interface(get_location(FD), FD)
+    unexported_public_interface(FD)
         << FD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
   }
 
@@ -355,16 +358,16 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     if (is_in_system_header(VD))
       return;
 
+    // Skip all variable declarations not in header files.
+    if (!is_in_header(VD))
+      return;
+
     // Skip local variables. We are only interested in static fields.
     if (VD->getParentFunctionOrMethod())
       return;
 
     // Skip static fields that have initializers.
     if (VD->hasInit())
-      return;
-
-    // Skip all variable declarations not in header files.
-    if (!is_in_header(VD))
       return;
 
     // Skip all other local and global variables unless they are extern.
@@ -392,7 +395,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
       return;
 
     clang::SourceLocation SLoc = VD->getBeginLoc();
-    unexported_public_interface(get_location(VD), VD)
+    unexported_public_interface(VD)
         << VD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
   }
 
@@ -432,7 +435,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     clang::SourceLocation SLoc = RD->getLocation();
     const clang::SourceLocation location =
         context_.getFullLoc(SLoc).getExpansionLoc();
-    unexported_public_interface(location, RD)
+    unexported_public_interface(RD, location)
         << RD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
   }
 
