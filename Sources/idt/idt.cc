@@ -9,12 +9,12 @@
 #include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
-#include <set>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -128,7 +128,10 @@ private:
 
 // Track a set of clang::Decl declarations by unique ID.
 class DeclSet {
-  std::set<std::uintptr_t> decls_;
+  // Use the maximum allowed fixed-size for SmallPtrSet. If the set grows
+  // larger than this size, SmallPtrSet switches to "large set" behavior.
+  static constexpr size_t SMALL_SET_SIZE = 32;
+  llvm::SmallPtrSet<std::uintptr_t, SMALL_SET_SIZE> decls_;
 
   // Use pointer identity of the canonical declaration object as a unique ID.
   template <typename Decl_>
