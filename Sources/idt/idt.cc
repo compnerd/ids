@@ -507,6 +507,23 @@ public:
     return true;
   }
 
+  // Visit every constructor call in the compilation unit to determine if there
+  // are any inline calls to private constructors. In this uncommon case, the
+  // private constructor must be annotated for export. Constructor calls are not
+  // visited by VisitCallExpr.
+  bool VisitCXXConstructExpr(clang::CXXConstructExpr *CE) {
+    const clang::CXXConstructorDecl *CD = CE->getConstructor();
+    if (!CD)
+      return true;
+
+    // Only consider private constructors here. Non-private constructors will be
+    // considered for export by  VisitFunctionDecl.
+    if (CD->getAccess() == clang::AccessSpecifier::AS_private)
+      export_function_if_needed(CD);
+
+    return true;
+  }
+
   // VisitVarDecl will visit all variable declarations as well as static fields
   // in classes and structs. Non-static fields are not visited by this method.
   bool VisitVarDecl(clang::VarDecl *VD) {

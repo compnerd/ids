@@ -5,11 +5,19 @@ class WithPrivateMembers {
 public:
   // CHECK: PrivateMembers.hh:[[@LINE+1]]:3: remark: unexported public interface 'publicMethod'
   int publicMethod();
+  // CHECK-NOT: PrivateMembers.hh:[[@LINE-1]]:3: remark: unexported public interface 'privateStaticField'
+
+  static WithPrivateMembers *create(int x) {
+    return new WithPrivateMembers();
+  }
 
   // CHECK-NOT: PrivateMembers.hh:[[@LINE+1]]:{{.*}}
   inline int publicInlineMethod() {
     if (privateMethod() > 0)
       return privateMethod() + publicMethod();
+
+    WithPrivateMembers other;
+    auto x = *this + other;
 
     privateStaticInlineMethod();
 
@@ -27,21 +35,30 @@ public:
   }
 
 private:
+  // CHECK: PrivateMembers.hh:[[@LINE+1]]:3: remark: unexported public interface 'WithPrivateMembers'
+  explicit WithPrivateMembers();
+  // CHECK-NOT: PrivateMembers.hh:[[@LINE-1]]:{{.*}}
+
   // CHECK: PrivateMembers.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateMethod'
   int privateMethod();
-  // CHECK-NOT: PrivateMembers.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateMethod'
+  // CHECK-NOT: PrivateMembers.hh:[[@LINE-1]]:{{.*}}
 
   // CHECK-NOT: PrivateMembers.hh:[[@LINE+1]]:{{.*}}
   int privateInlineMethod() {
     return 0;
   }
 
+  // CHECK: PrivateMembers.hh:[[@LINE+1]]:3: remark: unexported public interface 'operator+'
+  WithPrivateMembers operator+(const WithPrivateMembers &other) const;
+  // CHECK-NOT: PrivateMembers.hh:[[@LINE-1]]:{{.*}}
+
   // CHECK: PrivateMembers.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateStaticField'
   static int privateStaticField;
-  // CHECK-NOT: PrivateMembers.hh:[[@LINE-1]]:3: remark: unexported public interface 'privateStaticField'
+  // CHECK-NOT: PrivateMembers.hh:[[@LINE-1]]:{{.*}}
 
   // CHECK: PrivateMembers.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateStaticMethod'
   static void privateStaticMethod();
+  // CHECK-NOT: PrivateMembers.hh:[[@LINE-1]]:{{.*}}
 
   // CHECK-NOT: PrivateMembers.hh:[[@LINE+1]]:{{.*}}
   static void privateStaticInlineMethod() {}
@@ -51,6 +68,7 @@ private:
 
   // CHECK: PrivateMembers.hh:[[@LINE+1]]:3: remark: unexported public interface 'privateMethodForFriend'
   void privateMethodForFriend() const;
+  // CHECK-NOT: PrivateMembers.hh:[[@LINE-1]]:{{.*}}
 };
 
 // CHECK-NOT: PrivateMembers.hh:[[@LINE+1]]:{{.*}}
