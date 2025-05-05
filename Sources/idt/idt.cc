@@ -128,10 +128,7 @@ private:
 
 // Track a set of clang::Decl declarations by unique ID.
 class DeclSet {
-  // Use the maximum allowed fixed-size for SmallPtrSet. If the set grows
-  // larger than this size, SmallPtrSet switches to "large set" behavior.
-  static constexpr size_t SMALL_SET_SIZE = 32;
-  llvm::SmallPtrSet<std::uintptr_t, SMALL_SET_SIZE> decls_;
+  llvm::SmallPtrSet<std::uintptr_t, 32> decls_;
 
   // Use pointer identity of the canonical declaration object as a unique ID.
   template <typename Decl_>
@@ -374,8 +371,8 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
       return;
 
     // Skip all other local and global variables unless they are extern.
-    if (!VD->isStaticDataMember() &&
-        VD->getStorageClass() != clang::StorageClass::SC_Extern)
+    if (!(VD->isStaticDataMember() ||
+          VD->getStorageClass() == clang::StorageClass::SC_Extern))
       return;
 
     // Skip fields in template declarations.
