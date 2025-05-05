@@ -212,6 +212,10 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   clang::DiagnosticBuilder
   unexported_public_interface(const clang::Decl *D, clang::SourceLocation location) {
     add_missing_include(location);
+
+    // Track every unexported declaration encountered. This information is used
+    // by is_symbol_exported to ensure a symbol does not get reported multiple
+    // times.
     exported_decls_.insert(D);
 
     clang::DiagnosticsEngine &diagnostics_engine = context_.getDiagnostics();
