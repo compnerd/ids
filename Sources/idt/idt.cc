@@ -514,6 +514,19 @@ public:
     return true;
   }
 
+  // Visit every unresolved member expression in the compilation unit to
+  // determine if there are overloaded private methods that might be called. In
+  // this uncommon case, the private method should be annotated.
+  bool VisitUnresolvedMemberExpr(clang::UnresolvedMemberExpr *E) {
+    // Iterate over potential declarations
+    for (const clang::NamedDecl *ND : E->decls())
+      if (const auto *MD = llvm::dyn_cast<clang::CXXMethodDecl>(ND))
+        if (MD->getAccess() == clang::AccessSpecifier::AS_private)
+          export_function_if_needed(MD);
+
+    return true;
+  }
+
   // Visit every constructor call in the compilation unit to determine if there
   // are any inline calls to private constructors. In this uncommon case, the
   // private constructor must be annotated for export. Constructor calls are not
