@@ -1,4 +1,4 @@
-// RUN: %idt --export-macro IDT_TEST_ABI %s 2>&1 | %FileCheck %s
+// RUN: %idt --extra-arg="-fno-delayed-template-parsing" --export-macro IDT_TEST_ABI %s 2>&1 | %FileCheck %s
 
 class TemplateCallsPrivateMethod {
 public:
