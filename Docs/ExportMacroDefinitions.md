@@ -7,25 +7,25 @@ to the source. This approach allows supporting visibility annotations
 DLL import/export annotations (`__declspec(dllimport)`,
 `__declspec(dllexport)`) when building for Windows.
 
-For example, the `PROJECT_EXPORT` macro defined below can be added to symbols in a
+For example, the `Project_ABI` macro defined below can be added to symbols in a
 project’s header files files that should be externally visible.
 
 ```cpp
-#if defined(PROJECT_EXPORT_STATIC)
+#if defined(PROJECT_STATIC)
 /* We are building Project as a static library (no exports) */
-#  define PROJECT_EXPORT
+#  define Project_ABI
 #else
 /* We are building Project as a shared library */
 #  if defined(_WIN32)
 #    if defined(Project_EXPORTS)
        /* We are building this library */
-#      define PROJECT_EXPORT __declspec(dllexport)
+#      define Project_ABI __declspec(dllexport)
 #    else
        /* We are using this library */
-#      define PROJECT_EXPORT __declspec(dllimport)
+#      define Project_ABI __declspec(dllimport)
 #    endif
 #  else
-#    define PROJECT_EXPORT __visibility__((visibility("default")))
+#    define Project_ABI __visibility__((__visibility__("default")))
 #  endif
 #endif
 ```

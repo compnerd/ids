@@ -58,7 +58,7 @@ S:\Source\ids\build\bin\idt.exe `
   --inplace \
   --export-macro=PUBLIC_ABI \
   --include-header="include/MyAnnotations.h" \
-  --extra-arg="-DLLVM_ABI=[[gnu::visibility(\"default\")]]" \
+  --extra-arg='-DLLVM_ABI=[[gnu::visibility("default")]]' \
   --extra-arg="-Wno-macro-redefined" \
   S:\Source\MyProject\include\ProjectHeader1.h \
   S:\Source\MyProject\include\ProjectHeader2.h
