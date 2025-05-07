@@ -436,7 +436,9 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     // Insert the annotation immediately before the tag name, which is the
     // position returned by getLocation.
     clang::LangOptions LO = RD->getASTContext().getLangOpts();
-    clang::SourceLocation SLoc = RD->getLocation();
+    clang::SourceLocation SLoc = RD->getQualifier()
+                                     ? RD->getQualifierLoc().getBeginLoc()
+                                     : RD->getLocation();
     const clang::SourceLocation location =
         context_.getFullLoc(SLoc).getExpansionLoc();
     unexported_public_interface(RD, location)
