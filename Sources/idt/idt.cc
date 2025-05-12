@@ -424,11 +424,22 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     // exported on non-Windows platforms. Do this regardless of the method's
     // access level.
     bool should_export_record = false;
-    for (const auto *MD : RD->methods())
+    for (const auto *MD : RD->methods()) {
       if ((should_export_record =
                !(MD->isPureVirtual() || MD->isDefaulted() || MD->isDeleted()) &&
                (MD->isVirtual() && !MD->hasBody())))
         break;
+
+      // Unlike other pure virtual functions, pure virtual destructors require
+      // an out-of-line implementation. If a pure virtual destructor is found
+      // that has no body and is not defaulted, it must have an out-of-line
+      // implementation outside of the translation unit. In this case, treat it
+      // like any other out-of-line virtual method decl and export the record.
+      if ((should_export_record = llvm::isa<clang::CXXDestructorDecl>(MD) &&
+                                  MD->isPureVirtual()) &&
+          !(MD->hasBody() || MD->isDefaulted()))
+        break;
+    }
 
     if (!should_export_record)
       return;
