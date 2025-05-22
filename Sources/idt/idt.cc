@@ -52,6 +52,11 @@ apply_fixits("apply-fixits", llvm::cl::init(false),
              llvm::cl::cat(idt::category));
 
 llvm::cl::opt<bool>
+friendly_fields("friendly-fields", llvm::cl::init(false),
+                llvm::cl::desc("Export private fields of classes with friends"),
+                llvm::cl::cat(idt::category));
+
+llvm::cl::opt<bool>
 inplace("inplace", llvm::cl::init(false),
         llvm::cl::desc("Apply suggested changes in-place"),
         llvm::cl::cat(idt::category));
@@ -287,6 +292,16 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     for (const clang::DeclContext *DC = D->getDeclContext(); DC; DC = DC->getParent())
       if (const auto *RD = llvm::dyn_cast<clang::RecordDecl>(DC))
         return is_symbol_exported(RD);
+
+    return false;
+  }
+
+  template <typename Decl_>
+  bool parent_record_has_friends(const Decl_ *D) const {
+    if (auto *ParentRecord = llvm::dyn_cast<clang::CXXRecordDecl>(D->getDeclContext()))
+      for (auto *PD : ParentRecord->decls())
+        if (llvm::dyn_cast<clang::FriendDecl>(PD))
+          return true;
 
     return false;
   }
@@ -549,9 +564,11 @@ public:
   // VisitVarDecl will visit all variable declarations as well as static fields
   // in classes and structs. Non-static fields are not visited by this method.
   bool VisitVarDecl(clang::VarDecl *VD) {
-    // Ignore private static field declarations. Any that require export will be
-    // identified by VisitDeclRefExpr.
-    if (VD->getAccess() == clang::AccessSpecifier::AS_private)
+    // Ignore private static field declarations unless the class has friends
+    // that may need access to them. Any other private fields requiring export
+    // will be identified by VisitDeclRefExpr.
+    if (VD->getAccess() == clang::AccessSpecifier::AS_private &&
+        (!friendly_fields || !parent_record_has_friends(VD)))
       return true;
 
     export_variable_if_needed(VD);
