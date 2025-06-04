@@ -16,5 +16,5 @@ void function();
 // CHECK-NO-INCLUDE: MissingInclude.hh:[[@LINE-2]]:1: remark: unexported public interface 'function'
 
 extern int variable;
-// CHECK-ADD-INCLUDE: MissingInclude.hh:[[@LINE-1]]:1: remark: unexported public interface 'variable'
-// CHECK-NO-INCLUDE: MissingInclude.hh:[[@LINE-2]]:1: remark: unexported public interface 'variable'
+// CHECK-ADD-INCLUDE: MissingInclude.hh:[[@LINE-1]]:8: remark: unexported public interface 'variable'
+// CHECK-NO-INCLUDE: MissingInclude.hh:[[@LINE-2]]:8: remark: unexported public interface 'variable'

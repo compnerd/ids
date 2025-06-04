@@ -343,11 +343,17 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     if (contains(get_ignored_symbols(), FD->getNameAsString()))
       return;
 
-    clang::SourceLocation SLoc =
-        FD->getTemplatedKind() == clang::FunctionDecl::TK_NonTemplate
-            ? FD->getBeginLoc()
-            : FD->getInnerLocStart();
-    unexported_public_interface(FD)
+    // Use the inner start location so that the annotation comes after
+    // any template information.
+    clang::SourceLocation SLoc = FD->getInnerLocStart();
+
+    // If the function declaration has any existing attributes, the export macro
+    // should be inserted after them. We can approximate this location using the
+    // function's return type location.
+    if (!FD->attrs().empty())
+      SLoc = FD->getTypeSourceInfo()->getTypeLoc().getBeginLoc();
+
+    unexported_public_interface(FD, SLoc)
         << FD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
   }
 
@@ -399,7 +405,15 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
       return;
 
     clang::SourceLocation SLoc = VD->getBeginLoc();
-    unexported_public_interface(VD)
+
+    // If the variable declaration has any existing attributes, the export macro
+    // should be inserted after them. Similarly, if the variable has external
+    // storage, the export macro should be inserted after the extern keyword. We
+    // can approximate this location using the variable's type location.
+    if (!VD->attrs().empty() || VD->hasExternalStorage())
+      SLoc = VD->getTypeSourceInfo()->getTypeLoc().getBeginLoc();
+
+    unexported_public_interface(VD, SLoc)
         << VD << clang::FixItHint::CreateInsertion(SLoc, export_macro + " ");
   }
 
