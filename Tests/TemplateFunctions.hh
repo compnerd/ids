@@ -8,5 +8,5 @@ template <> void template_function_inline<int>(int &) { }
 // CHECK-NOT: TemplateFunctions.hh:[[@LINE-1]]:1: remark: unexported public interface 'template_function_inline<int>'
 
 template <> void template_function_inline<char>(char &);
-// CHECK: TemplateFunctions.hh:[[@LINE-1]]:1: remark: unexported public interface 'template_function_inline<char>'
+// CHECK: TemplateFunctions.hh:[[@LINE-1]]:13: remark: unexported public interface 'template_function_inline<char>'
 // CHECK-FIXIT: template <> IDT_TEST_ABI void template_function_inline<char>(char &);
