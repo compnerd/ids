@@ -311,18 +311,18 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
   template <typename Decl_>
   void check_symbol_not_exported(const Decl_ *D, const std::string &message) {
     clang::SourceLocation SLoc;
-    if (const auto *VA = D->template getAttr<clang::DLLExportAttr>())
-      if (!VA->isInherited())
-        SLoc = VA->getLocation();
+    if (const auto *A = D->template getAttr<clang::DLLExportAttr>())
+      if (!A->isInherited())
+        SLoc = A->getLocation();
 
-    if (const auto *VA = D->template getAttr<clang::DLLImportAttr>())
-      if (!VA->isInherited())
-        SLoc = VA->getLocation();
+    if (const auto *A = D->template getAttr<clang::DLLImportAttr>())
+      if (!A->isInherited())
+        SLoc = A->getLocation();
 
-    if (const auto *VA = D->template getAttr<clang::VisibilityAttr>())
-      if (!VA->isInherited() &&
-          VA->getVisibility() == clang::VisibilityAttr::VisibilityType::Default)
-        SLoc = VA->getLocation();
+    if (const auto *A = D->template getAttr<clang::VisibilityAttr>())
+      if (!A->isInherited() &&
+          A->getVisibility() == clang::VisibilityAttr::VisibilityType::Default)
+        SLoc = A->getLocation();
 
     if (SLoc.isInvalid())
       return;
