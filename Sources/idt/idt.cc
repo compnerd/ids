@@ -15,7 +15,6 @@
 #include <array>
 #include <cstdint>
 #include <cstdlib>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <set>
@@ -800,7 +799,8 @@ private:
   static void rewrite(clang::tooling::CompileCommand &command,
                       llvm::StringRef path) {
     static constexpr std::array<llvm::StringRef, 5> kSourceExts{
-        ".cpp", ".cc", ".cxx", ".c++", ".C"};
+        ".cpp", ".cc", ".cxx", ".c++", ".C",
+    };
 
     // Replace the first source-file argument with `path`. If none is
     // present, append `path` as the input.
@@ -819,18 +819,6 @@ private:
     }
     if (!swapped)
       command.CommandLine.push_back(path.str());
-
-    // Enforce `-x c++-header`. Replace any existing `-x <lang>` value, or
-    // insert `-x c++-header` immediately after argv[0].
-    auto x_it =
-        std::find(command.CommandLine.begin(), command.CommandLine.end(), "-x");
-    if (x_it != command.CommandLine.end() &&
-        std::next(x_it) != command.CommandLine.end()) {
-      *std::next(x_it) = "c++-header";
-    } else if (!command.CommandLine.empty()) {
-      command.CommandLine.insert(std::next(command.CommandLine.begin()),
-                                 {"-x", "c++-header"});
-    }
 
     command.Filename = path.str();
   }
