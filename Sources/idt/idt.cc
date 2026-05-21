@@ -68,11 +68,11 @@ ignored_symbols("ignore",
                 llvm::cl::cat(idt::category));
 
 llvm::cl::opt<std::string>
-    main_file("main-file",
-              llvm::cl::desc("Path of a translation unit with an entry in the "
-                             "compilation database whose flags will be used to "
-                             "parse the positional argument"),
-              llvm::cl::value_desc("path"), llvm::cl::cat(idt::category));
+main_file("main-file",
+          llvm::cl::desc("Path of a translation unit with an entry in the "
+                         "compilation database whose flags will be used to "
+                         "parse the positional argument"),
+          llvm::cl::value_desc("path"), llvm::cl::cat(idt::category));
 
 template <typename Key, typename Compare, typename Allocator>
 bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
@@ -791,6 +791,7 @@ public:
 
   // Stub these out for safety since we do not use them.
   std::vector<std::string> getAllFiles() const override { return {}; }
+
   std::vector<clang::tooling::CompileCommand>
   getAllCompileCommands() const override {
     return {};
