@@ -68,10 +68,11 @@ ignored_symbols("ignore",
                 llvm::cl::cat(idt::category));
 
 llvm::cl::opt<std::string>
-    cdb_source("cdb-source",
-               llvm::cl::desc("Path of a translation unit with an entry in the "
-                              "compilation database."),
-               llvm::cl::value_desc("path"), llvm::cl::cat(idt::category));
+    main_file("main-file",
+              llvm::cl::desc("Path of a translation unit with an entry in the "
+                             "compilation database whose flags will be used to "
+                             "parse the positional argument"),
+              llvm::cl::value_desc("path"), llvm::cl::cat(idt::category));
 
 template <typename Key, typename Compare, typename Allocator>
 bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
@@ -281,12 +282,12 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     return false;
   }
 
-  // When `--cdb-source` is set, the positional argument is parsed as the
+  // When `--main-file` is set, the positional argument is parsed as the
   // translation unit's main file; restrict fixits to it so we don't
   // accidentally rewrite decls in transitively-included headers. Outside
-  // of `--cdb-source` mode, this is a no-op.
+  // of `--main-file` mode, this is a no-op.
   template <typename Decl_> bool is_in_main_tu(const Decl_ *D) const {
-    if (cdb_source.empty())
+    if (main_file.empty())
       return true;
     return source_manager_.isInMainFile(get_location(D));
   }
@@ -367,7 +368,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     if (!is_in_header(FD))
       return;
 
-    // Restrict to the main TU when `--cdb-source` is set.
+    // Restrict to the main TU when `--main-file` is set.
     if (!is_in_main_tu(FD))
       return;
 
@@ -455,7 +456,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     if (!is_in_header(VD))
       return;
 
-    // Restrict to the main TU when `--cdb-source` is set.
+    // Restrict to the main TU when `--main-file` is set.
     if (!is_in_main_tu(VD))
       return;
 
@@ -529,7 +530,7 @@ class visitor : public clang::RecursiveASTVisitor<visitor> {
     if (is_in_system_header(RD))
       return;
 
-    // Restrict to the main TU when `--cdb-source` is set.
+    // Restrict to the main TU when `--main-file` is set.
     if (!is_in_main_tu(RD))
       return;
 
@@ -772,12 +773,12 @@ struct factory : clang::tooling::FrontendActionFactory {
 
 // CompilationDatabase wrapper that looks up flags under one path (the
 // "donor") and reports them as belonging to a different path (the actual
-// input). Used by `--cdb-source` for projects where headers do not appear in
+// input). Used by `--main-file` for projects where headers do not appear in
 // the compilation database.
-class cdb_source_database : public clang::tooling::CompilationDatabase {
+class main_file_database : public clang::tooling::CompilationDatabase {
 public:
-  cdb_source_database(const clang::tooling::CompilationDatabase &inner,
-                      std::string donor)
+  main_file_database(const clang::tooling::CompilationDatabase &inner,
+                     std::string donor)
       : inner_(inner), donor_(std::move(donor)) {}
 
   std::vector<clang::tooling::CompileCommand>
@@ -837,8 +838,8 @@ int main(int argc, char *argv[]) {
   if (options) {
     std::unique_ptr<CompilationDatabase> wrapped;
     CompilationDatabase *cdb = &options->getCompilations();
-    if (!cdb_source.empty()) {
-      wrapped = std::make_unique<idt::cdb_source_database>(*cdb, cdb_source);
+    if (!main_file.empty()) {
+      wrapped = std::make_unique<idt::main_file_database>(*cdb, main_file);
       cdb = wrapped.get();
     }
     ClangTool tool{*cdb, options->getSourcePathList()};
