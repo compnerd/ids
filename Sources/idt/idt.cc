@@ -79,6 +79,11 @@ bool contains(const std::set<Key, Compare, Allocator>& set, const Key& key) {
   return set.find(key) != set.end();
 }
 
+template <class T, std::size_t N>
+bool contains(const std::array<T, N>& arr, const T& value) {
+  return std::find(arr.begin(), arr.end(), value) != arr.end();
+}
+
 const std::set<std::string> &get_ignored_symbols() {
   static auto kIgnoredFunctions = [&]() -> std::set<std::string> {
       return { ignored_symbols.begin(), ignored_symbols.end() };
@@ -808,15 +813,10 @@ private:
     // present, append `path` as the input.
     bool swapped = false;
     for (auto &arg : command.CommandLine) {
-      if (swapped)
+      if (contains(kSourceExts, llvm::sys::path::extension(llvm::StringRef(arg)))) {
+        arg = path.str();
+        swapped = true;
         break;
-      llvm::StringRef ref{arg};
-      for (llvm::StringRef ext : kSourceExts) {
-        if (ref.ends_with(ext)) {
-          arg = path.str();
-          swapped = true;
-          break;
-        }
       }
     }
     if (!swapped)
